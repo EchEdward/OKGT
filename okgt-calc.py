@@ -6,7 +6,57 @@ from scipy.constants import epsilon_0
 import scipy.sparse as sparse
 import scipy.sparse.linalg as linalg
 
+from openpyxl import load_workbook
+
 from initial_data import okgt_info, vl_info
+
+
+
+def load_data():
+    Katal = load_workbook(filename = 'Katal.xlsx')
+    Kat = Katal['Kat']
+
+    supports = {}
+    conductors = {}
+
+    s = (2,3,4,5,6,9,10,11,12,13,14,14)
+    c = (18,19,20)
+    check = lambda arr:sum([0 if Kat.cell(row=i,column=j).value is not None else 1 for i in arr])
+
+    j = 2
+    while  Kat.cell(row=1,column=j).value is not None or\
+        Kat.cell(row=17,column=j).value is not None:
+        if not check(s):
+            supports[Kat.cell(row=1,column=j).value] = {
+                "X":{
+                    "A":Kat.cell(row=2,column=j).value,
+                    "B":Kat.cell(row=3,column=j).value,
+                    "C":Kat.cell(row=4,column=j).value,
+                    "T1":Kat.cell(row=5,column=j).value,
+                    "T2":Kat.cell(row=6,column=j).value,
+                },
+                "Y":{
+                    "A":Kat.cell(row=9,column=j).value,
+                    "B":Kat.cell(row=10,column=j).value,
+                    "C":Kat.cell(row=11,column=j).value,
+                    "T1":Kat.cell(row=12,column=j).value,
+                    "T2":Kat.cell(row=13,column=j).value,
+                },
+                "type":Kat.cell(row=14,column=j).value,
+                "isulator":Kat.cell(row=15,column=j).value,
+            }
+        if not check(c):
+            conductors = {
+                "r":Kat.cell(row=18,column=j).value,
+                "R0":Kat.cell(row=19,column=j).value,
+                "Id":Kat.cell(row=20,column=j).value,
+            }
+        j+=1
+
+    return supports, conductors
+
+
+k_supports, k_conductors = load_data()
 
 
 """ 
@@ -110,6 +160,9 @@ i, j = 0, 0
 lst_conections = []
 lst_cc_conections = []
 
+to_okgt = {}
+okgt_to_cc ={}
+
 for (n, k), sectors in okgt_info.items():
     if n not in nodes_position:
         nodes_position[n] = (i,j)
@@ -135,6 +188,8 @@ for (n, k), sectors in okgt_info.items():
                     i += 1
                     end = (i,j,1)
                     j += 1
+
+                    to_okgt[(vl_sector["name_vl"],vl_sector["link_branch"],nc,kc)] = len(lst_conections)
 
                     d_row = {
                         "start": start,
@@ -194,6 +249,7 @@ for (n, k), sectors in okgt_info.items():
                 lst_conections.append(d_row)
                 if sector["countercable"]:
                     lst_cc_conections.append({"is_vl":False, "s":start,"e":end,"length":dl,"sector":sector,})
+                    okgt_to_cc[len(lst_conections)-1] = len(lst_cc_conections)-1
 
             
 
@@ -260,6 +316,8 @@ def get_vl_sector_info(vl,branch,supports,dtype):
 # Construct graph of transmission lines' links
 lst_vl_conections = []
 i += 1
+
+to_vl = {}
 
 s_i_vl, s_j_vl = i,j
 
@@ -352,7 +410,9 @@ for vl_name, vl in vl_info.items():
                     #e1,e2,e3,e4,e5= (i,j,1),(i+1,j+1,1),(i+2,j+2,1),(i+3,j+3,1),(i+4,j+4,1)
                     j += 5
 
-                
+                    if sector["type"]=="with_okgt":
+                        to_vl[(vl_name,key,nc,kc)] = len(lst_vl_conections)
+
                     lst_vl_conections.append({"start":s1,"end":e1,**data1})
                     lst_vl_conections.append({"start":s2,"end":e2,**data2})
                     lst_vl_conections.append({"start":s3,"end":e3,**data3})
@@ -360,7 +420,7 @@ for vl_name, vl in vl_info.items():
                     lst_vl_conections.append({"start":s5,"end":e5,**data5})
 
                     if countercables is not None:
-                        lst_cc_conections.append({"is_vl":True, "s":s4,"e":e4,"length":dl,"sector":countercables})
+                        lst_cc_conections.append({"is_vl":True, "vl_name":vl_name,"branch":key,"N":nc,"K":kc, "s":s4,"e":e4,"length":dl,"sector":countercables})
 
 
         if branch["PS"] in ["both", "right"]:
@@ -384,7 +444,10 @@ for vl_name, vl in vl_info.items():
 
 s_i_сс, s_j_сс = i,j
 cc_lst_conections = []
+to_cc = {}
 for item in lst_cc_conections:
+    if item["is_vl"]:
+        to_cc[(item["vl_name"],item["branch"],item["N"],item["K"])] = len(cc_lst_conections)
     d = {"is_vl":item["is_vl"],
         "start":(item["s"][0],j,-1),
         "end":(item["e"][0],j,1),
@@ -400,13 +463,97 @@ for item in lst_cc_conections:
     
     j+=1
 
-    #i+=1
-    #j+=1
-    #print(nodes_position)
-""" for row in lst_vl_conections:
-    print(row) """
+s_i_end, s_j_end = i,j
+    
+
+for idd,row in enumerate(lst_vl_conections):
+    print(row)
+    if idd>100:break
 
 
-""" for row in cc_lst_conections:
-    print(row) """
 
+okgt_to = {}
+vl_to = {}
+cc_to = {}
+
+for i,item in enumerate(lst_conections):
+    if item["type"]=="VL":
+        key = (item['name_vl'],item['link_branch'],item['supportN'],item['supportK'])
+        pos = (*item['start'][:2],*item['end'][:2])
+        cc = (*cc_lst_conections[to_cc[key]]["start"][:2],*cc_lst_conections[to_cc[key]]["end"][:2]) if key in to_cc else None
+        vl = (*lst_vl_conections[to_vl[key]]["start"][:2],*lst_vl_conections[to_vl[key]]["end"][:2])
+        okgt_to[pos] = {"vl":(vl,to_vl[key]),"cc":(cc,to_cc.get(key))}
+        vl_to[vl] = {"okgt":(pos,i),"cc":(cc,to_cc.get(key))}
+        if cc is not None:
+            cc_to[cc] = {"okgt":(pos,i),"vl":(vl,to_vl[key])}
+        
+    elif item["type"]=="single_conductive" and i in okgt_to_cc:
+        pos = (*item['start'][:2],*item['end'][:2])
+        cc = (*cc_lst_conections[okgt_to_cc[i]]['start'][:2],*cc_lst_conections[okgt_to_cc[i]]['end'][:2])
+        okgt_to[pos] = {"vl":(None,None),"cc":(cc,okgt_to_cc[i])}
+        cc_to[cc] = {"okgt":(pos,i),"vl":(None,None)}
+        
+    """ elif item["type"]=='single_dielectric':
+        pass """
+
+
+A = sparse.lil_matrix((s_i_end, s_j_end),dtype=np.float64)
+
+for item in lst_conections: 
+    A[item["start"][:2]] = item["start"][2]
+    A[item["end"][:2]] = item["end"][2]
+
+for item in lst_vl_conections:
+    A[item["start"][:2]] = item["start"][2]
+    A[item["end"][:2]] = item["end"][2]
+
+for item in cc_lst_conections:
+    A[item["start"][:2]] = item["start"][2]
+    A[item["end"][:2]] = item["end"][2]
+
+
+pz = 30
+carson_cashe = {}
+mu0=np.pi*4*10**(-7)
+jp=1j*2*np.pi*50
+sh_int=np.arange(0, 1, 0.00001)
+
+def Carson(data):
+    if data in carson_cashe:
+        return carson_cashe[data]
+    else:
+        X,Y,R,r,pz = data
+        mp=(mu0*jp*(1/pz))**0.5
+        Cars_ii = lambda x,hi,ri:(np.exp(-2*x*hi)*np.cos(x*ri))/(x+(x**2+mp**2)**0.5)
+        Cars_ij = lambda x,hi,hj,xi,xj:(np.exp(-x*(hi+hj))*np.cos(x*abs(xi-xj)))/(x+(x**2+mp**2)**0.5)
+
+        size = len(X)
+        M = sparse.lil_matrix((size,size), dtype=np.complex128)
+
+        for a in range(size):
+            for b in range(a,size):
+                if a == b:
+                    M[a,b]=jp*mu0/2/np.pi*(np.log(2*abs(Y[a])/r[a])+2*simps(Cars_ii(sh_int,Y[a],r[a]),sh_int))
+                else:
+                    M[a,b]=M[b,a]=jp*mu0/4/np.pi*(np.log(((Y[a]+Y[b])**2+(X[a]-X[b])**2)/((Y[a]-Y[b])**2+(X[a]-X[b])**2))\
+                        +4*simps(Cars_ij(sh_int,Y[a],Y[b],X[a],X[b]),sh_int))
+
+        return M
+        
+
+
+Z = sparse.lil_matrix((s_j_end, s_j_end),dtype=np.complex128)
+for i in range(0,len(lst_vl_conections),5):
+    item = lst_vl_conections[i]
+    if item["type"]=="with_okgt" and not item['is_Ps_sector'] and\
+        vl_to[(*item["start"][:2],*item["end"][:2])]["cc"][0] is not None:
+        pass
+
+    elif item["type"]=="with_okgt" and not item['is_Ps_sector'] and\
+        vl_to[(*item["start"][:2],*item["end"][:2])]["cc"][0] is None:
+        pass
+
+    elif item["type"]=="without_okgt" and not item['is_Ps_sector']:
+        pass
+
+print("end")
