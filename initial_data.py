@@ -23,6 +23,7 @@ okgt_info = {
             "length": 5, 
             "groundwire":"ОКГТ-38", 
             "H_cable": 10,
+            "X_cable": 0,
             "countercable": True,
             "H_countercable": 0.5,
             "X_countercable": 0.0,
@@ -60,6 +61,7 @@ okgt_info = {
             "length": 0.4, 
             "groundwire":"ОКГТ-38", 
             "H_cable": 10,
+            "X_cable": 0,
             "countercable": False,
             "point_grounded" : 0,
             "way_grounded": "not",
@@ -152,7 +154,7 @@ vl_info = {
                 "link_branch": ("1","2"),
                 "supportN" : 51,
                 "supportK" : 61,
-                "phase": "BAC"
+                "phase": "-BAC"
             },
         ],
         "conductors":[
@@ -160,7 +162,7 @@ vl_info = {
                 "link_branch": ("1","2"),
                 "supportN" : 1,
                 "supportK" : 61,
-                "conductor": "AC-70/11"
+                "conductor": "AC 70/11"
             },
         ],
         "groundwires":[
@@ -178,7 +180,7 @@ vl_info = {
                 "supportK" : 61,
                 "type": "one",
                 "is_okgt":None,
-                "groundwire1": "AC-70/11"
+                "groundwire1": "AC 70/11"
             },
         ],
         "grounded": [
@@ -222,7 +224,7 @@ vl_info = {
                 "link_branch": ("1","2"),
                 "supportN" : 1,
                 "supportK" : 61,
-                "support": "ПБ-110/1"
+                "support": "ПБ-110-1,3,11,13"
             },
         ],
         "PSs":[
@@ -298,13 +300,13 @@ vl_info = {
                 "link_branch": ("1","2"),
                 "supportN" : 46,
                 "supportK" : 30,
-                "conductor": "AC-70/11"
+                "conductor": "AC 70/11"
             },
             {
                 "link_branch": ("1","2"),
                 "supportN" : 30,
                 "supportK" : 1,
-                "conductor": "AC-50/7"
+                "conductor": "AC 50/8"
             },
         ],
         "groundwires":[
@@ -314,7 +316,7 @@ vl_info = {
                 "supportK" : 41,
                 "type": "one",
                 "is_okgt":None,
-                "groundwire1": "AC-70/11"
+                "groundwire1": "AC 70/11"
             },
             {
                 "link_branch": ("1","2"),
@@ -330,7 +332,7 @@ vl_info = {
                 "supportK" : 1,
                 "type": "one",
                 "is_okgt":None,
-                "groundwire1": "AC-50/7"
+                "groundwire1": "AC 50/8"
             },
         ],
         "grounded": [
@@ -351,13 +353,13 @@ vl_info = {
                 "link_branch": ("1","2"),
                 "supportN" : 46,
                 "supportK" : 30,
-                "support": "ПБ-110/1"
+                "support": "ПБ-110-1,3,11,13"
             },
             {
                 "link_branch": ("1","2"),
                 "supportN" : 30,
                 "supportK" : 1,
-                "support": "ПБ-110/3"
+                "support": "ПБ-23,21"
             },
         ],
         "PSs":[
@@ -433,13 +435,13 @@ vl_info = {
                 "link_branch": ("1","2"),
                 "supportN" : 31,
                 "supportK" : 20,
-                "conductor": "AC-70/11"
+                "conductor": "AC 70/11"
             },
             {
                 "link_branch": ("1","2"),
                 "supportN" : 20,
                 "supportK" : 1,
-                "conductor": "AC-50/7"
+                "conductor": "AC 50/8"
             },
         ],
         "groundwires":[
@@ -449,7 +451,7 @@ vl_info = {
                 "supportK" : 28,
                 "type": "one",
                 "is_okgt":None,
-                "groundwire1": "AC-50/7"
+                "groundwire1": "AC 50/8"
             },
             {
                 "link_branch": ("1","2"),
@@ -457,7 +459,7 @@ vl_info = {
                 "supportK" : 6,
                 "type": "one",
                 "is_okgt":"groundwire1",
-                "groundwire1": "ОКГТ-50"
+                "groundwire1": "ОКГТ-55"
             },
             {
                 "link_branch": ("1","2"),
@@ -465,7 +467,7 @@ vl_info = {
                 "supportK" : 1,
                 "type": "one",
                 "is_okgt":None,
-                "groundwire1": "AC-50/7"
+                "groundwire1": "AC 50/8"
             },
         ],
         "grounded": [
@@ -499,13 +501,13 @@ vl_info = {
                 "link_branch": ("1","2"),
                 "supportN" : 31,
                 "supportK" : 23,
-                "support": "ПБ-110/1"
+                "support": "ПБ-110-1,3,11,13"
             },
             {
                 "link_branch": ("1","2"),
                 "supportN" : 23,
                 "supportK" : 1,
-                "support": "ПБ-110/3"
+                "support": "ПБ-110-1,3,11,13"
             },
         ],
         "PSs":[
@@ -656,31 +658,31 @@ vl_info = {
                 "link_branch": ("1","2"),
                 "supportN" : 1,
                 "supportK" : 26,
-                "conductor": "AC-70/11"
+                "conductor": "AC 70/11"
             },
             {
                 "link_branch": ("2","3"),
                 "supportN" : 26,
                 "supportK" : 36,
-                "conductor": "AC-70/11"
+                "conductor": "AC 70/11"
             },
             {
                 "link_branch": ("3","4"),
                 "supportN" : 36,
                 "supportK" : 66,
-                "conductor": "AC-70/11"
+                "conductor": "AC 70/11"
             },
             {
                 "link_branch": ("2","5"),
                 "supportN" : 26,
                 "supportK" : 61,
-                "conductor": "AC-70/11"
+                "conductor": "AC 70/11"
             },
             {
                 "link_branch": ("3","6"),
                 "supportN" : 46,
                 "supportK" : 1,
-                "conductor": "AC-70/11"
+                "conductor": "AC 70/11"
             },
         ],
         "groundwires":[
@@ -691,7 +693,7 @@ vl_info = {
                 "type": "two",
                 "is_okgt":"groundwire2",
                 "groundwire1": "ОКГТ-38",
-                "groundwire2": "AC-70/11",
+                "groundwire2": "AC 70/11",
             },
             {
                 "link_branch": ("2","3"),
@@ -700,7 +702,7 @@ vl_info = {
                 "type": "two",
                 "is_okgt":"groundwire1",
                 "groundwire1": "ОКГТ-38",
-                "groundwire2": "AC-70/11",
+                "groundwire2": "AC 70/11",
             },
             {
                 "link_branch": ("2","3"),
@@ -709,7 +711,7 @@ vl_info = {
                 "type": "two",
                 "is_okgt":None,
                 "groundwire1": None,
-                "groundwire2": "AC-70/11",
+                "groundwire2": "AC 70/11",
             },
             {
                 "link_branch": ("2","3"),
@@ -718,7 +720,7 @@ vl_info = {
                 "type": "two",
                 "is_okgt":"groundwire1",
                 "groundwire1": "ОКГТ-38",
-                "groundwire2": "AC-70/11",
+                "groundwire2": "AC 70/11",
             },
             {
                 "link_branch": ("3","4"),
@@ -727,7 +729,7 @@ vl_info = {
                 "type": "two",
                 "is_okgt":"groundwire1",
                 "groundwire1": "ОКГТ-38",
-                "groundwire2": "AC-70/11",
+                "groundwire2": "AC 70/11",
             },
             {
                 "link_branch": ("2","5"),
@@ -735,7 +737,7 @@ vl_info = {
                 "supportK" : 61,
                 "type": "one",
                 "is_okgt":None,
-                "groundwire1": "AC-70/11",
+                "groundwire1": "AC 70/11",
             },
             {
                 "link_branch": ("3","6"),
@@ -743,7 +745,7 @@ vl_info = {
                 "supportK" : 1,
                 "type": "one",
                 "is_okgt":None,
-                "groundwire1": "AC-70/11",
+                "groundwire1": "AC 70/11",
             },
             
         ],
@@ -809,32 +811,32 @@ vl_info = {
                 "link_branch": ("1","2"),
                 "supportN" : 1,
                 "supportK" : 26,
-                "support": "ПБ-110/5"
+                "support": "П-22-м"
             },
             {
                 "link_branch": ("2","3"),
                 "supportN" : 26,
                 "supportK" : 36,
-                "support": "ПБ-110/5"
+                "support": "П-22-м"
             },
             {
                 "link_branch": ("3","4"),
                 "supportN" : 36,
                 "supportK" : 66,
-                "support": "ПБ-110/5"
+                "support": "П-22-м"
             },
             {
                 "link_branch": ("2","5"),
                 "supportN" : 26,
                 "supportK" : 61,
-                "support": "ПБ-110/1"
+                "support": "ПБ-110-1,3,11,13"
                 
             },
             {
                 "link_branch": ("3","6"),
                 "supportN" : 46,
                 "supportK" : 1,
-                "support": "ПБ-110/1"
+                "support": "ПБ-110-1,3,11,13"
                 
             },
         ],

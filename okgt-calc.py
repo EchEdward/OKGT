@@ -20,7 +20,7 @@ def load_data():
     conductors = {}
 
     s = (2,3,4,5,6,9,10,11,12,13,14,14)
-    c = (18,19,20)
+    c = (18,19)
     check = lambda arr:sum([0 if Kat.cell(row=i,column=j).value is not None else 1 for i in arr])
 
     j = 2
@@ -46,7 +46,7 @@ def load_data():
                 "isulator":Kat.cell(row=15,column=j).value,
             }
         if not check(c):
-            conductors = {
+            conductors[Kat.cell(row=17,column=j).value] = {
                 "r":Kat.cell(row=18,column=j).value,
                 "R0":Kat.cell(row=19,column=j).value,
                 "Id":Kat.cell(row=20,column=j).value,
@@ -57,6 +57,7 @@ def load_data():
 
 
 k_supports, k_conductors = load_data()
+#print(k_supports)
 
 
 """ 
@@ -244,6 +245,7 @@ for (n, k), sectors in okgt_info.items():
                     "length":dl,
                     "groundwire": sector["groundwire"], 
                     "H_cable":sector["H_cable"],
+                    "X_cable":sector["X_cable"],
                     "countercable": sector["countercable"]
                     }
                 lst_conections.append(d_row)
@@ -272,7 +274,13 @@ def get_vl_sector_info(vl,branch,supports,dtype):
     elif dtype["name"] == "phases":
         for item in vl_info[vl]["phases"]:
             if item["link_branch"]==branch and f(item["supportN"],item["supportK"],supports[0],supports[1]):
-                return {"p1":item["phase"][0],"p2":item["phase"][1],"p3":item["phase"][2]}
+                if item["phase"][0] == "-":
+                    mirrored = True
+                    p1,p2,p3 = item["phase"][1:]
+                else:
+                    mirrored = False
+                    p1,p2,p3 = item["phase"]
+                return {"p1":p1,"p2":p2,"p3":p3,"mirrored":mirrored}
 
     elif dtype["name"] =="supports":
         for item in vl_info[vl]["supports"]:
@@ -364,12 +372,12 @@ for vl_name, vl in vl_info.items():
                     countercables = get_vl_sector_info(vl_name,key,(nc, kc,),{"name":"countercables"})
 
 
-                    keyword = ["type","is_Ps_sector","length","Tsupport","phase","conductor"] #"start","end",
-                    d1 = [sector["type"],False,dl,supports["s1"],phases["p1"],conductors["c1"]] #s1,e1,
-                    d2 = [sector["type"],False,dl,supports["s2"],phases["p2"],conductors["c2"]] #s2,e2,
-                    d3 = [sector["type"],False,dl,supports["s3"],phases["p3"],conductors["c3"]] #s3,e3,
-                    d4 = [sector["type"],False,dl,supports["s4"],"T1",{"gw1":groundwires["gw1"],"is_okgt":groundwires["is_okgt"]}] #s4,e4,
-                    d5 = [sector["type"],False,dl,supports["s5"],"T2",{"gw1":groundwires["gw1"],"is_okgt":groundwires["is_okgt"]}] #s5,e5,
+                    keyword = ["type","is_Ps_sector","length","Tsupport","phase","mirrored","conductor"] #"start","end",
+                    d1 = [sector["type"],False,dl,supports["s1"],phases["p1"],phases["mirrored"],conductors["c1"]] #s1,e1,
+                    d2 = [sector["type"],False,dl,supports["s2"],phases["p2"],phases["mirrored"],conductors["c2"]] #s2,e2,
+                    d3 = [sector["type"],False,dl,supports["s3"],phases["p3"],phases["mirrored"],conductors["c3"]] #s3,e3,
+                    d4 = [sector["type"],False,dl,supports["s4"],"T1",phases["mirrored"],[groundwires["gw1"],groundwires["is_okgt"]=="gw1"]] #s4,e4,
+                    d5 = [sector["type"],False,dl,supports["s5"],"T2",phases["mirrored"],[groundwires["gw2"],groundwires["is_okgt"]=="gw2"]] #s5,e5,
 
                     for kw,rz1,rz2,rz3,rz4,rz5 in zip(keyword,d1,d2,d3,d4,d5):
                         data1[kw],data2[kw],data3[kw],data4[kw],data5[kw] = rz1,rz2,rz3,rz4,rz5
@@ -466,9 +474,9 @@ for item in lst_cc_conections:
 s_i_end, s_j_end = i,j
     
 
-for idd,row in enumerate(lst_vl_conections):
+""" for idd,row in enumerate(lst_vl_conections):
     print(row)
-    if idd>100:break
+    if idd>100:break """
 
 
 
@@ -517,29 +525,112 @@ carson_cashe = {}
 mu0=np.pi*4*10**(-7)
 jp=1j*2*np.pi*50
 sh_int=np.arange(0, 1, 0.00001)
+mp=(mu0*jp*(1/pz))**0.5
+ro_fe =  0.1 #Ом*мм2/м
+R_isol = 10**8
+
+#R_cc = lambda d:(4*ro_fe)/(np.pi*d**2)
+Cars_ii = lambda x,hi,ri:(np.exp(-2*x*hi)*np.cos(x*ri))/(x+(x**2+mp**2)**0.5)
+Cars_ij = lambda x,hi,hj,xi,xj:(np.exp(-x*(hi+hj))*np.cos(x*abs(xi-xj)))/(x+(x**2+mp**2)**0.5)
 
 def Carson(data):
-    if data in carson_cashe:
-        return carson_cashe[data]
+    dd = tuple([tuple(data[i]) if i<5 else data[i] for i in range(7)])
+    if dd in carson_cashe:
+        return carson_cashe[dd]
     else:
-        X,Y,R,r,pz = data
+        X,Y,R,r,trig,pz,l = dd 
         mp=(mu0*jp*(1/pz))**0.5
-        Cars_ii = lambda x,hi,ri:(np.exp(-2*x*hi)*np.cos(x*ri))/(x+(x**2+mp**2)**0.5)
-        Cars_ij = lambda x,hi,hj,xi,xj:(np.exp(-x*(hi+hj))*np.cos(x*abs(xi-xj)))/(x+(x**2+mp**2)**0.5)
+        
 
         size = len(X)
         M = sparse.lil_matrix((size,size), dtype=np.complex128)
 
         for a in range(size):
             for b in range(a,size):
-                if a == b:
-                    M[a,b]=jp*mu0/2/np.pi*(np.log(2*abs(Y[a])/r[a])+2*simps(Cars_ii(sh_int,Y[a],r[a]),sh_int))
-                else:
+                if a == b and trig[a]:
+                    M[a,b]=R[a]*l + jp*mu0/2/np.pi*(np.log(2*abs(Y[a])/r[a])+2*simps(Cars_ii(sh_int,Y[a],r[a]),sh_int))*l*10**3
+                elif a == b and not trig[a]:
+                    M[a,b]=R[a]
+                elif a!=b and (not trig[a] or not trig[b]):
+                    M[a,b]=M[b,a]=0
+                elif a!=b and not trig[a] and not trig[b]:
                     M[a,b]=M[b,a]=jp*mu0/4/np.pi*(np.log(((Y[a]+Y[b])**2+(X[a]-X[b])**2)/((Y[a]-Y[b])**2+(X[a]-X[b])**2))\
-                        +4*simps(Cars_ij(sh_int,Y[a],Y[b],X[a],X[b]),sh_int))
+                        +4*simps(Cars_ij(sh_int,Y[a],Y[b],X[a],X[b]),sh_int))*l*10**3
 
+
+        carson_cashe[dd] = M
         return M
         
+
+def init_carson_data(key,data,shift):
+    if key=="phase":
+        support = k_supports[data["Tsupport"]]
+        mirrored = -1 if data["mirrored"] else 1
+        X = mirrored*support["X"][data["phase"]]
+        Y = support["Y"][data["phase"]]-support["isulator"]+shift
+        R = k_conductors[data["conductor"]]["R0"]
+        r = k_conductors[data["conductor"]]["r"]
+        return X,Y,R,r
+        
+    elif key=="groundwire":
+        if data["conductor"][1] or (not data["conductor"][1] and data["conductor"][0] is None):
+            return None,None,R_isol,None
+        elif not data["conductor"][1] and data["conductor"][0] is not None:
+            support = k_supports[data["Tsupport"]]
+            mirrored = -1 if data["mirrored"] else 1
+            X = mirrored*support["X"][data["phase"]]
+            Y = support["Y"][data["phase"]]
+            if Y==0 and X==0:
+                raise Exception("%s doesn't support groundwire %s" % (data["Tsupport"],data["phase"]))
+            else:
+                Y+=shift
+            R = k_conductors[data["conductor"][0]]["R0"]
+            r = k_conductors[data["conductor"][0]]["r"]
+            return X,Y,R,r
+
+    elif key=="okgt_vl":
+        support = k_supports[data["Tsupport"]]
+        mirrored = -1 if data["mirrored"] else 1
+        X = mirrored*support["X"][data["phase"]]
+        Y = support["Y"][data["phase"]]
+        if Y==0 and X==0:
+            raise Exception("%s doesn't support groundwire %s" % (data["Tsupport"],data["phase"]))
+        else:
+            Y+=shift
+        R = k_conductors[data["conductor"][0]]["R0"]
+        r = k_conductors[data["conductor"][0]]["r"]
+        return X,Y,R,r
+    elif key=="cc":
+        X = data["X_countercable"]
+        Y = data["H_countercable"]+shift
+        r = data["D_countercable"]/2*10**-3
+        R = (4*ro_fe)/(np.pi*data["D_countercable"]**2)*10**3
+        return X,Y,R,r
+
+    elif key=="okgt_single":
+        X = data['X_cable']
+        Y = data['H_cable']+shift
+        R = k_conductors[data['groundwire']]["R0"]
+        r = k_conductors[data['groundwire']]["r"]
+        return X,Y,R,r
+
+    elif key=="phase_ps":
+        return None,None,R_isol,None
+    elif key=="groundwire_ps":
+        if data["conductor"][0] is None:
+            return None,None,R_isol,None
+        else:
+            support = k_supports[data["Tsupport"]]
+            mirrored = -1 if data["mirrored"] else 1
+            X = mirrored*support["X"][data["phase"]]
+            Y = support["Y"][data["phase"]]
+            if Y==0 and X==0:
+                raise Exception("%s doesn't support groundwire %s" % (data["Tsupport"],data["phase"]))
+            else:
+                Y+=shift
+            R = k_conductors[data["conductor"][0]]["R0"]
+            r = k_conductors[data["conductor"][0]]["r"]
+            return X,Y,R,r
 
 
 Z = sparse.lil_matrix((s_j_end, s_j_end),dtype=np.complex128)
@@ -547,13 +638,209 @@ for i in range(0,len(lst_vl_conections),5):
     item = lst_vl_conections[i]
     if item["type"]=="with_okgt" and not item['is_Ps_sector'] and\
         vl_to[(*item["start"][:2],*item["end"][:2])]["cc"][0] is not None:
-        pass
+        vl_d = lst_vl_conections[i:i+5]
+        cc = cc_lst_conections[vl_to[(*item["start"][:2],*item["end"][:2])]["cc"][1]]
+        okgt = lst_conections[vl_to[(*item["start"][:2],*item["end"][:2])]["okgt"][1]]
+
+        shift = cc["H_countercable"]+0.1
+
+        t1 = vl_d[3]["conductor"]
+        t2 = vl_d[4]["conductor"]
+        pos = 3 if t1[1] else 4
+        
+        dl = vl_d[0]["length"]
+
+        trig = [True,True,True,(not t1[1] and t1[0] is not None),(not t2[1] and t2[0] is not None),True,True]
+
+        k = ["phase","phase","phase","groundwire","groundwire","okgt_vl","cc"]
+        d = [vl_d[0],vl_d[1],vl_d[2],vl_d[3],vl_d[4],vl_d[pos],cc]
+
+        X,Y,R,r = [],[],[],[]
+
+        for key, data in zip(k,d):
+            Xi,Yi,Ri,ri = init_carson_data(key,data,shift)
+            X.append(Xi)
+            Y.append(Yi)
+            R.append(Ri)
+            r.append(ri)
+        
+        M = Carson([X,Y,R,r,trig,pz,dl])
+        ivln,ivlk = vl_d[0]["start"][1],vl_d[4]["start"][1]
+        iokgt = okgt["start"][1]
+        icc = cc["start"][1]
+
+        Z[ivln:ivlk+1,ivln:ivlk+1] = M[:5,:5]
+        Z[iokgt,iokgt] = M[5,5]
+        Z[icc,icc] = M[6,6]
+
+        Z[ivln:ivlk+1,iokgt] = M[:5,5]
+        Z[ivln:ivlk+1,icc] = M[:5,6]
+
+        Z[iokgt,ivln:ivlk+1] = M[5,:5]
+        Z[icc,ivln:ivlk+1] = M[6,:5]
+
+        Z[iokgt,icc] = M[5,6]
+        Z[icc,iokgt] = M[6,5]
+
 
     elif item["type"]=="with_okgt" and not item['is_Ps_sector'] and\
         vl_to[(*item["start"][:2],*item["end"][:2])]["cc"][0] is None:
-        pass
+        vl_d = lst_vl_conections[i:i+5]
+        okgt = lst_conections[vl_to[(*item["start"][:2],*item["end"][:2])]["okgt"][1]]
+
+        shift = 0
+
+        t1 = vl_d[3]["conductor"]
+        t2 = vl_d[4]["conductor"]
+        pos = 3 if t1[1] else 4
+        
+        dl = vl_d[0]["length"]
+
+        trig = [True,True,True,(not t1[1] and t1[0] is not None),(not t2[1] and t2[0] is not None),True]
+
+        k = ["phase","phase","phase","groundwire","groundwire","okgt_vl"]
+        d = [vl_d[0],vl_d[1],vl_d[2],vl_d[3],vl_d[4],vl_d[pos]]
+
+        X,Y,R,r = [],[],[],[]
+
+        for key, data in zip(k,d):
+            Xi,Yi,Ri,ri = init_carson_data(key,data,shift)
+            X.append(Xi)
+            Y.append(Yi)
+            R.append(Ri)
+            r.append(ri)
+        
+        M = Carson([X,Y,R,r,trig,pz,dl])
+        ivln,ivlk = vl_d[0]["start"][1],vl_d[4]["start"][1]
+        iokgt = okgt["start"][1]
+
+        Z[ivln:ivlk+1,ivln:ivlk+1] = M[:5,:5]
+        Z[iokgt,iokgt] = M[5,5]
+
+        Z[ivln:ivlk+1,iokgt] = M[:5,5]
+        Z[iokgt,ivln:ivlk+1] = M[5,:5]
+        
 
     elif item["type"]=="without_okgt" and not item['is_Ps_sector']:
-        pass
+        vl_d = lst_vl_conections[i:i+5]
 
-print("end")
+        shift = 0
+
+        t1 = vl_d[3]["conductor"]
+        t2 = vl_d[4]["conductor"]
+        pos = 3 if t1[1] else 4
+        
+        dl = vl_d[0]["length"]
+
+        trig = [True,True,True,(not t1[1] and t1[0] is not None),(not t2[1] and t2[0] is not None)]
+
+        k = ["phase","phase","phase","groundwire","groundwire"]
+        d = [vl_d[0],vl_d[1],vl_d[2],vl_d[3],vl_d[4]]
+
+        X,Y,R,r = [],[],[],[]
+
+        for key, data in zip(k,d):
+            Xi,Yi,Ri,ri = init_carson_data(key,data,shift)
+            X.append(Xi)
+            Y.append(Yi)
+            R.append(Ri)
+            r.append(ri)
+        
+        M = Carson([X,Y,R,r,trig,pz,dl])
+        ivln,ivlk = vl_d[0]["start"][1],vl_d[4]["start"][1]
+        
+        Z[ivln:ivlk+1,ivln:ivlk+1] = M[:5,:5]
+
+    elif (item["type"]=="with_okgt" or item["type"]=="without_okgt") and item['is_Ps_sector']:
+        vl_d = lst_vl_conections[i:i+5]
+
+        shift = 0
+
+        t1 = vl_d[3]["conductor"]
+        t2 = vl_d[4]["conductor"]
+        pos = 3 if t1[1] else 4
+        
+        dl = vl_d[0]["length"]
+
+        trig = [False,False,False,t1[0] is not None,t2[0] is not None]
+
+        k = ["phase_ps","phase_ps","phase_ps","groundwire_ps","groundwire_ps"]
+        d = [vl_d[0],vl_d[1],vl_d[2],vl_d[3],vl_d[4]]
+
+        X,Y,R,r = [],[],[],[]
+
+        for key, data in zip(k,d):
+            Xi,Yi,Ri,ri = init_carson_data(key,data,shift)
+            X.append(Xi)
+            Y.append(Yi)
+            R.append(Ri)
+            r.append(ri)
+        
+        M = Carson([X,Y,R,r,trig,pz,dl])
+        ivln,ivlk = vl_d[0]["start"][1],vl_d[4]["start"][1]
+        
+        Z[ivln:ivlk+1,ivln:ivlk+1] = M[:5,:5]
+
+
+for i, item in enumerate(lst_conections):
+    if item["type"]=="VL":
+        continue
+    elif item["type"]=='single_conductive':
+        if item['countercable']:
+            pos = (*item['start'][:2],*item['end'][:2])
+            cc = cc_lst_conections[okgt_to[pos]["cc"][1]]
+            shift = cc["H_countercable"]+0.1
+            dl = item["length"]
+
+            trig = [True,True]
+            k = ["okgt_single","cc"]
+            d = [item,cc]
+            X,Y,R,r = [],[],[],[]
+
+            for key, data in zip(k,d):
+                Xi,Yi,Ri,ri = init_carson_data(key,data,shift)
+                X.append(Xi)
+                Y.append(Yi)
+                R.append(Ri)
+                r.append(ri)
+
+            M = Carson([X,Y,R,r,trig,pz,dl])
+            iokgt,icc = item["start"][1],cc["start"][1]
+            
+            Z[iokgt,iokgt] = M[0,0]
+            Z[icc,icc] = M[1,1]
+
+            Z[iokgt,icc] = M[0,1]
+            Z[iokgt,icc] = M[0,1]
+        else:
+            shift = 0
+            dl = item["length"]
+
+            trig = [True]
+            k = ["okgt_single"]
+            d = [item]
+            X,Y,R,r = [],[],[],[]
+
+            for key, data in zip(k,d):
+                Xi,Yi,Ri,ri = init_carson_data(key,data,shift)
+                X.append(Xi)
+                Y.append(Yi)
+                R.append(Ri)
+                r.append(ri)
+            
+            M = Carson([X,Y,R,r,trig,pz,dl])
+            iokgt = item["start"][1]
+            
+            Z[iokgt,iokgt] = M[0,0]
+        
+    elif item["type"]=='single_dielectric':
+        X,Y,R,r,trig = [None],[None],[R_isol],[None],[False]
+        M = Carson([X,Y,R,r,trig,pz,0])
+        iokgt = item["start"][1]
+        Z[iokgt,iokgt] = M[0,0]
+        
+for i in range(s_j_end):
+    if Z[i,i] == 0:
+        print(i)     
+
+print("end",s_j_end)
