@@ -22,12 +22,12 @@ def load_data():
 
     s = (2,3,4,5,6,9,10,11,12,13,14,14)
     c = (18,19)
-    check = lambda arr:sum([0 if Kat.cell(row=i,column=j).value is not None else 1 for i in arr])
+    check = lambda arr,j:sum([0 if Kat.cell(row=i,column=j).value is not None else 1 for i in arr])
 
     j = 2
     while  Kat.cell(row=1,column=j).value is not None or\
         Kat.cell(row=17,column=j).value is not None:
-        if not check(s):
+        if not check(s,j):
             supports[Kat.cell(row=1,column=j).value] = {
                 "X":{
                     "A":Kat.cell(row=2,column=j).value,
@@ -46,7 +46,7 @@ def load_data():
                 "type":Kat.cell(row=14,column=j).value,
                 "isulator":Kat.cell(row=15,column=j).value,
             }
-        if not check(c):
+        if not check(c,j):
             conductors[Kat.cell(row=17,column=j).value] = {
                 "r":Kat.cell(row=18,column=j).value,
                 "R0":Kat.cell(row=19,column=j).value,
@@ -150,7 +150,7 @@ def single_okgt_zy(sector,v):
     return grounded
 
 def type_zy_chose(sector,grounded,Y_cc):
-    yz = (1/sector["point_grounded"] if grounded in ["Yzy","both","both2"] else 0)+\
+    return (1/sector["point_grounded"] if grounded in ["Yzy","both","both2"] else 0)+\
         (Y_cc/2 if grounded in ["Ycc","both"] else 0)+(Y_cc if grounded in ["Ycc2","both2"] else 0)  
 
 
@@ -245,7 +245,7 @@ def link_vl_to_vl(vl_info,vl_name,branch,n,k):
 
     return results
 
-def init_carson_data(key,data,shift):
+def init_carson_data(key,data,trig,shift):
     if key=="phase":
         support = k_supports[data["Tsupport"]]
         mirrored = -1 if data["mirrored"] else 1
@@ -256,9 +256,9 @@ def init_carson_data(key,data,shift):
         return X,Y,R,r
         
     elif key=="groundwire":
-        if data["conductor"][1] or (not data["conductor"][1] and data["conductor"][0] is None):
+        if data["conductor"][1] or (not data["conductor"][1] and data["conductor"][0] is None) or not trig:
             return None,None,R_isol,None
-        elif not data["conductor"][1] and data["conductor"][0] is not None:
+        elif not data["conductor"][1] and data["conductor"][0] is not None and trig:
             support = k_supports[data["Tsupport"]]
             mirrored = -1 if data["mirrored"] else 1
             X = mirrored*support["X"][data["phase"]]
@@ -300,9 +300,9 @@ def init_carson_data(key,data,shift):
     elif key=="phase_ps":
         return None,None,R_isol,None
     elif key=="groundwire_ps":
-        if data["conductor"][0] is None:
+        if data["conductor"][0] is None or not trig:
             return None,None,R_isol,None
-        else:
+        elif data["conductor"][0] is not None and trig:
             support = k_supports[data["Tsupport"]]
             mirrored = -1 if data["mirrored"] else 1
             X = mirrored*support["X"][data["phase"]]
@@ -315,8 +315,8 @@ def init_carson_data(key,data,shift):
             r = k_conductors[data["conductor"][0]]["r"]
             return X,Y,R,r
 
-Cars_ii = lambda x,hi,ri:(np.exp(-2*x*hi)*np.cos(x*ri))/(x+(x**2+mp**2)**0.5)
-Cars_ij = lambda x,hi,hj,xi,xj:(np.exp(-x*(hi+hj))*np.cos(x*abs(xi-xj)))/(x+(x**2+mp**2)**0.5)
+Cars_ii = lambda x,hi,ri,mp:(np.exp(-2*x*hi)*np.cos(x*ri))/(x+(x**2+mp**2)**0.5)
+Cars_ij = lambda x,hi,hj,xi,xj,mp:(np.exp(-x*(hi+hj))*np.cos(x*abs(xi-xj)))/(x+(x**2+mp**2)**0.5)
 
 def Carson(data):
     dd = tuple([tuple(data[i]) if i<5 else data[i] for i in range(7)])
@@ -333,18 +333,50 @@ def Carson(data):
         for a in range(size):
             for b in range(a,size):
                 if a == b and trig[a]:
-                    M[a,b]=R[a]*l + jp*mu0/2/np.pi*(np.log(2*abs(Y[a])/r[a])+2*simps(Cars_ii(sh_int,Y[a],r[a]),sh_int))*l*10**3
+                    M[a,b]=R[a]*l + jp*mu0/2/np.pi*(np.log(2*abs(Y[a])/r[a])+2*simps(Cars_ii(sh_int,Y[a],r[a],mp),sh_int))*l*10**3
                 elif a == b and not trig[a]:
                     M[a,b]=R[a]
                 elif a!=b and (not trig[a] or not trig[b]):
                     M[a,b]=M[b,a]=0
                 elif a!=b and not trig[a] and not trig[b]:
                     M[a,b]=M[b,a]=jp*mu0/4/np.pi*(np.log(((Y[a]+Y[b])**2+(X[a]-X[b])**2)/((Y[a]-Y[b])**2+(X[a]-X[b])**2))\
-                        +4*simps(Cars_ij(sh_int,Y[a],Y[b],X[a],X[b]),sh_int))*l*10**3
+                        +4*simps(Cars_ij(sh_int,Y[a],Y[b],X[a],X[b],mp),sh_int))*l*10**3
 
 
         carson_cashe[dd] = M
         return M
+
+def combinations(lst,k):
+    l = len(lst)
+    if k>l:
+        raise StopIteration
+    
+    comb = [i for i in range(k)]
+    while True:
+        yield [lst[i] for i in comb]
+        
+        if comb[0]==l-k:
+            raise StopIteration
+        
+        for i in range(k-1,-1,-1):
+            comb[i]+=1
+            if comb[i]==l-(k-1-i):
+                if i-1>-1:
+                    for j in range(i-1,-1,-1):
+                        a = comb[j]+i-j+1
+                        if a<l-(k-1-i):
+                            comb[i]=a
+                            break
+            else:
+                break
+
+def submatrix_putter(slices,SM, M):
+    for sl in slices:
+        M[sl[2]:sl[3]+1,sl[2]:sl[3]+1] = SM[sl[0]:sl[1]+1,sl[0]:sl[1]+1]
+
+    for [sl1, sl2] in combinations(slices,2):
+        M[sl1[2]:sl1[3]+1,sl2[2]:sl2[3]+1] = SM[sl1[0]:sl1[1]+1,sl2[0]:sl2[1]+1]
+        M[sl2[2]:sl2[3]+1,sl1[2]:sl1[3]+1] = SM[sl2[0]:sl2[1]+1,sl1[0]:sl1[1]+1]
 
 
 def main_calc(okgt_info, vl_info, pz=30):
@@ -365,6 +397,8 @@ def main_calc(okgt_info, vl_info, pz=30):
 
     okgt_to_cc = {}
     to_vls = {}
+
+    ps_vls = {}
     
 
     lst_zy = []
@@ -560,6 +594,7 @@ def main_calc(okgt_info, vl_info, pz=30):
                                 i+=5
                                 e1,e2,e3,e4,e5= (i,j,1),(i+1,j+1,1),(i+2,j+2,1),(i+3,j+3,1),(i+4,j+4,1)
                                 j += 5
+                                ps_vls[(vl_name,key,nc,kc)] = (len(vl_lst),branch["PS_name_1"],"left")
                                 ps = get_vl_sector_info(vl_name,key,(nc, kc,),{"name":"PSs","side":"PS_name_1"},vl_info)
                                 vl_lst.append({"start":s1,"end":e1,**data1,"length":ps["length"],"is_Ps_sector":True})
                                 vl_lst.append({"start":s2,"end":e2,**data2,"length":ps["length"],"is_Ps_sector":True})
@@ -581,8 +616,8 @@ def main_calc(okgt_info, vl_info, pz=30):
                         #e1,e2,e3,e4,e5= (i,j,1),(i+1,j+1,1),(i+2,j+2,1),(i+3,j+3,1),(i+4,j+4,1)
                         j += 5
 
-                        if sector["type"]=="with_okgt":
-                            to_vls[(vl_name,key,nc,kc)] = len(vl_lst)
+                        #if sector["type"]=="with_okgt":
+                        to_vls[(vl_name,key,nc,kc)] = len(vl_lst)
 
                         vl_lst.append({"start":s1,"end":e1,**data1})
                         vl_lst.append({"start":s2,"end":e2,**data2})
@@ -602,6 +637,7 @@ def main_calc(okgt_info, vl_info, pz=30):
                 s1,s2,s3,s4,s5 = (i,j,-1),(i+1,j+1,-1),(i+2,j+2,-1),(i+3,j+3,-1),(i+4,j+4,-1)
                 i += 5
                 e1,e2,e3,e4,e5= (i,j,1),(i+1,j+1,1),(i+2,j+2,1),(i+3,j+3,1),(i+4,j+4,1)
+                ps_vls[(vl_name,key,nc,kc)] = (len(vl_lst),branch["PS_name_2"],"right")
                 ps = get_vl_sector_info(vl_name,key,(nc, kc,),{"name":"PSs","side":"PS_name_2"},vl_info)
                 vl_lst.append({"start":s1,"end":e1,**data1,"length":ps["length"],"is_Ps_sector":True})
                 vl_lst.append({"start":s2,"end":e2,**data2,"length":ps["length"],"is_Ps_sector":True})
@@ -617,7 +653,8 @@ def main_calc(okgt_info, vl_info, pz=30):
                 nodes_position[key[1]] = (i,j)
 
     s_i_сс, s_j_сс = i,j
-    
+
+
     
     for item in cc_lst:
         if item["is_vl"]:
@@ -638,6 +675,8 @@ def main_calc(okgt_info, vl_info, pz=30):
         j+=1
 
     s_i_end, s_j_end = i,j
+
+    #print(vls_to_cc) 
 
 
     A = sparse.lil_matrix((s_i_end, s_j_end),dtype=np.float64)
@@ -660,19 +699,173 @@ def main_calc(okgt_info, vl_info, pz=30):
 
 
     Z = sparse.lil_matrix((s_j_end, s_j_end),dtype=np.complex128)
+    #print(s_j_end, s_j_end)
+
+    calculated_vl = set()
+    trig_maker = lambda lst,t=True: [(not val["conductor"][1] and val["conductor"][0] is not None) and t if i==3 or i==4 else True for i,val in enumerate(lst)]
+    key_maker = lambda lst: ["phase" if i!=3 and i!=4 else "groundwire" for i in range(len(lst))]
+
+    trig_maker_ps = lambda lst,t=True: [(val["conductor"][0] is not None) and t if i==3 or i==4 else False for i,val in enumerate(lst)]
+    key_maker_ps = lambda lst: ["phase_ps" if i!=3 and i!=4 else "groundwire_ps" for i in range(len(lst))]
 
     for i in range(0,len(vl_lst),5):
-        item = vl_lst[i]
-        if item["type"]=="with_okgt" and not item['is_Ps_sector']:
-            isCC = vls_to_cc.get(tuple(item[i] for i in ["name_vl","link_branch","supportN","supportK"]))
-            isOtherVls = vl_to_vls.get(tuple(item[i] for i in ["name_vl","link_branch","supportN","supportK"]))
-            isOkgt = vls_to_okgt.get(tuple(item[i] for i in ["name_vl","link_branch","supportN","supportK"]))
+        key = tuple(vl_lst[i][j] for j in ["name_vl","link_branch","supportN","supportK"])
+        if (key,vl_lst[i]['is_Ps_sector']) not in calculated_vl and not vl_lst[i]['is_Ps_sector']:
+            isCC = vls_to_cc.get(key)
+            isOtherVls = vl_to_vls.get(key,[])
+            isOkgt = vls_to_okgt.get(key)
 
-            print(isCC)
-            print(isOtherVls)
-            print(isOkgt)
+            shift = 0
+            trig = trig_maker(vl_lst[i:i+5])
+            k = key_maker(vl_lst[i:i+5])
+            d = [*vl_lst[i:i+5]]
+            calculated_vl.add((key,vl_lst[i]['is_Ps_sector']))
+            slices = [(0,4,vl_lst[i]["start"][1],vl_lst[i+4]["start"][1])]
+            sl=0
 
-            sys.exit()
+            for j in isOtherVls:
+                pt = vl_lst[to_vls[j]:to_vls[j]+5]
+                if vl_lst[i]["length"] != pt[0]["length"]:
+                    raise Exception(f"Length of common chains in not equal, dl1={vl_lst[i]['length']}, dl2={pt[0]['length']}")
+                trig+=trig_maker(pt,t=False)
+                k+=key_maker(pt)
+                d+=[*pt]
+                sl+=5
+                slices.append((sl,sl+4,pt[0]["start"][1],pt[4]["start"][1]))
+                calculated_vl.add((j,vl_lst[i]['is_Ps_sector']))
+
+            dl = vl_lst[i]["length"]
+
+            if isOkgt is not None:
+                sl += 1
+                k.append("okgt_vl")
+                trig.append(True)
+                slices.append((sl,sl,okgt_lst[isOkgt]["start"][1],okgt_lst[isOkgt]["start"][1]))
+                pos = 3 if vl_lst[i+3]["conductor"][1] else 4
+                for j in range(5,len(d),5):
+                    pos_n = 3 if d[j+3]["conductor"][1] else 4
+                    if pos != pos_n:
+                        raise Exception("OKGT can't be located on diffetent plases of miltichain support")
+                d.append(vl_lst[i+pos])
+                
+            if isCC is not None:
+                sl+=1
+                k.append("cc")
+                trig.append(True)  
+                slices.append((sl,sl,cc_lst_nw[isCC]["start"][1],cc_lst_nw[isCC]["start"][1]))
+                d.append(cc_lst_nw[isCC])
+                shift = cc_lst_nw[isCC]["H_countercable"]+0.1
+
+
+        elif (key,vl_lst[i]['is_Ps_sector']) not in calculated_vl and vl_lst[i]['is_Ps_sector']:
+            isOtherVls_ps = [j for j in vl_to_vls.get(key,[]) if j in ps_vls]
+            isOkgt = vls_to_okgt.get(key)
+            
+            shift = 0
+            trig = trig_maker_ps(vl_lst[i:i+5])
+            k = key_maker_ps(vl_lst[i:i+5])
+            d = [*vl_lst[i:i+5]]
+            calculated_vl.add((key,vl_lst[i]['is_Ps_sector']))
+            slices = [(0,4,vl_lst[i]["start"][1],vl_lst[i+4]["start"][1])]
+            sl=0
+
+            for j in isOtherVls_ps:
+                pt = vl_lst[ps_vls[j][0]:ps_vls[j][0]+5]
+                if vl_lst[i]["length"] != pt[0]["length"]:
+                    raise Exception(f"Length of common chains in not equal, dl1={vl_lst[i]['length']}, dl2={pt[0]['length']}")
+                trig+=trig_maker_ps(pt,t=False)
+                k+=key_maker_ps(pt)
+                d+=[*pt]
+                sl+=5
+                slices.append((sl,sl+4,pt[0]["start"][1],pt[4]["start"][1]))
+                calculated_vl.add((j,vl_lst[i]['is_Ps_sector']))
+
+            dl = vl_lst[i]["length"]
+
+            if isOkgt is not None:
+                pos = 3 if vl_lst[i+3]["conductor"][1] else 4
+                tp = ps_vls[key][2]
+                sides = ("end","start") if ps_vls[key][2]=="left" else ("start","end")
+                
+                node1 = vl_lst[i+pos][sides[0]][0]
+                node2 = okgt_lst[isOkgt][sides[1]][0]
+
+                lst_zy.append({"type":"bypass","points":[(node1,node2)]})
+
+
+        else: 
+            continue
+
+        X,Y,R,r = [],[],[],[]
+        for key, data, tr in zip(k,d,trig):
+            Xi,Yi,Ri,ri = init_carson_data(key,data,tr,shift)
+            X.append(Xi)
+            Y.append(Yi)
+            R.append(Ri)
+            r.append(ri)
+
+        chek_XY = [(x,y) for tp, x, y in zip(k,X,Y) if tp in ["phase","okgt_vl","cc","groundwire_ps","groundwire"] and x is not None and y is not None]
+        
+        if len(chek_XY) != len(set(chek_XY)):
+            raise Exception("Conductors can't have same coordinates")
+            
+        submatrix_putter(slices,Carson([X,Y,R,r,trig,pz,dl]), Z)
+
+    print("okgt start calc")
+            
+    for i, item in enumerate(okgt_lst):
+        if item["type"]=='single_conductive':
+            isCC = okgt_to_cc.get(i)
+
+            dl = item["length"]
+            trig = [True]
+            k = ["okgt_single"]
+            d = [item]
+            shift = 0
+            slices = [(0,0,item["start"][1],item["start"][1])]
+
+            if isCC is not None:
+                trig.append(True)
+                k.append("cc")
+                d.append(cc_lst_nw[isCC])
+                shift = cc_lst_nw[isCC]["H_countercable"]+0.1
+                slices.append((1,1,cc_lst_nw[isCC]["start"][1],cc_lst_nw[isCC]["start"][1]))
+
+            X,Y,R,r = [],[],[],[]
+
+            for key, data, tr in zip(k,d,trig):
+                Xi,Yi,Ri,ri = init_carson_data(key,data,tr,shift)
+                X.append(Xi)
+                Y.append(Yi)
+                R.append(Ri)
+                r.append(ri)
+            
+               
+        elif item["type"]=='single_dielectric':
+            X,Y,R,r,trig,dl = [None],[None],[R_isol],[None],[False],0
+            slices = [(0,0,item["start"][1],item["start"][1])]
+
+        else:
+            continue
+
+        chek_XY = [(x,y) for tp, x, y in zip(k,X,Y) if tp in ["phase","okgt_vl","cc","groundwire_ps","groundwire"] and x is not None and y is not None]
+        
+        if len(chek_XY) != len(set(chek_XY)):
+            raise Exception("Conductors can't have same coordinates")
+            
+        submatrix_putter(slices,Carson([X,Y,R,r,trig,pz,dl]), Z)
+
+
+    for i in range(s_j_end):
+        if Z[i,i] == 0:
+            print(i) 
+
+
+    for i in lst_zy:
+        if i["type"]=="bypass":
+            print(i)
+
+            
 
     
 

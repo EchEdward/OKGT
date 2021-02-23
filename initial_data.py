@@ -247,12 +247,10 @@ vl_info = {
         "PSs":[
             {
                 "PS_name": "PS_1",
-                "resistance": 0.5,
                 "length": 0.02,
             },
             {
                 "PS_name": "PS_2",
-                "resistance": 0.4,
                 "length": 0.02,
             },
         ],
@@ -383,12 +381,10 @@ vl_info = {
         "PSs":[
             {
                 "PS_name": "PS_3",
-                "resistance": 0.5,
                 "length": 0.01,
             },
             {
                 "PS_name": "PS_4",
-                "resistance": 0.6,
                 "length": 0.03,
             },
         ],
@@ -532,12 +528,10 @@ vl_info = {
         "PSs":[
             {
                 "PS_name": "PS_5",
-                "resistance": 0.6,
                 "length": 0.01,
             },
             {
                 "PS_name": "PS_6",
-                "resistance": 0.7,
                 "length": 0.01,
             },
         ],
@@ -863,22 +857,18 @@ vl_info = {
         "PSs":[
             {
                 "PS_name": "PS_7",
-                "resistance": 0.7,
                 "length": 0.02,
             },
             {
                 "PS_name": "PS_8",
-                "resistance": 0.6,
                 "length": 0.02,
             },
             {
                 "PS_name": "PS_9",
-                "resistance": 0.5,
                 "length": 0.02,
             },
             {
                 "PS_name": "PS_10",
-                "resistance": 0.4,
                 "length": 0.02,
             },
         ],
@@ -1016,14 +1006,27 @@ vl_info = {
         "PSs":[
             {
                 "PS_name": "PS_1",
-                "resistance": 0.5,
                 "length": 0.02,
             },
             {
                 "PS_name": "PS_11",
-                "resistance": 0.4,
                 "length": 0.02,
             },
         ],
     },
+}
+
+
+ps_info = {
+    "PS_1": {"resistance": 0.5,},
+    "PS_2": {"resistance": 0.4,},
+    "PS_3": {"resistance": 0.5,},
+    "PS_4": {"resistance": 0.6,},
+    "PS_5": {"resistance": 0.6,},
+    "PS_6": {"resistance": 0.7,},
+    "PS_7": {"resistance": 0.7,},
+    "PS_8": {"resistance": 0.6,},
+    "PS_9": {"resistance": 0.5,},
+    "PS_10": {"resistance": 0.4,},
+    "PS_11": {"resistance": 0.4,},
 }
