@@ -10,6 +10,8 @@ from openpyxl import load_workbook
 
 from initial_data import okgt_info, vl_info
 
+import sys
+
 
 
 def load_data():
@@ -93,44 +95,52 @@ Atrlnk = - Atrlnn
 """
 
 def get_vl_sector(key):
-    lst = []
+    lst = {}
     for name, value in vl_info.items():
         branches = {}
         for k, branch in value["branches"].items():
             branches[k] = (branch["supportN"],branch["supportK"])
         
+        lst[name] = []
+
         for sector in value["sectors"]:
             if sector["type"] == "with_okgt":
                 if sector["link_okgt"] == key:
                     d_sector = {k:v for k,v in sector.items()}
                     d_sector["branch_supports"] = branches[d_sector["link_branch"]]
                     d_sector["name_vl"] = name
-                    lst.append(d_sector)
+                    lst[name].append(d_sector)
+
+        if len(lst[name])==0:
+            del lst[name]
     return lst   
 
 
-def find_entry(lst, length):
+def find_entry(dct, length):
     dl = 0.0001
-    ln, lk = 0,  length
-    order = []
-    len_lst  = len(lst)
-    for _ in range(len_lst):
-        for i, val in enumerate(lst):
-            if i in order: 
-                continue
-            if ln-dl<=val['lengthN']<=ln+dl and val['lengthK']<=lk+dl:
-                order.append(i)
-                ln = val['lengthK']
+    orders = {}
+    for name, lst in dct.items():
+        
+        ln, lk = 0,  length
+        order = []
+        len_lst  = len(lst)
+        for _ in range(len_lst):
+            for i, val in enumerate(lst):
+                if i in order: 
+                    continue
+                if ln-dl<=val['lengthN']<=ln+dl and val['lengthK']<=lk+dl:
+                    order.append(i)
+                    ln = val['lengthK']
 
-        if len_lst == len(order):
-            #print("exit")
-            break
+            if len_lst == len(order):
+                break
+        else:
+            
+            raise Exception("Entries were not found")
+            
+        orders[name] = order
 
-    else:
-        raise Exception("Entries were not found")
-        #return "lol"
-
-    return order
+    return orders
 
 def sector_entry(lst,branch):
     new_lst = [i for i,val in enumerate(lst) if val["link_branch"]==branch]
@@ -152,6 +162,25 @@ def sector_entry(lst,branch):
 
     return order
 
+
+def R_cc(r0,lg,dg,h):
+    R = r0/(2*np.pi*lg*10**3)*(np.log((2*10**6*lg)/dg)+np.log(lg*10**3/2/h))
+    return R
+
+
+
+#print(R_cc(30,2.5,12,0.5),"aaaa")
+
+
+pz = 30
+carson_cashe = {}
+mu0=np.pi*4*10**(-7)
+jp=1j*2*np.pi*50
+sh_int=np.arange(0, 1, 0.00001)
+mp=(mu0*jp*(1/pz))**0.5
+ro_fe =  0.1 #Ом*мм2/м
+R_isol = 10**8
+
 #print(sector_entry(vl_info["VL #4"]["sectors"],("3","4")))
 
 #print(get_vl_sector("one"))
@@ -160,6 +189,8 @@ nodes_position = {}
 i, j = 0, 0
 lst_conections = []
 lst_cc_conections = []
+
+lst_zy = []
 
 to_okgt = {}
 okgt_to_cc ={}
@@ -172,8 +203,33 @@ for (n, k), sectors in okgt_info.items():
     for ind, sector in enumerate(sectors):
         if sector["type"] == "VL":
             vl_sectors = get_vl_sector(sector["name"])
-            vl_sectors = [vl_sectors[i] for i in find_entry(vl_sectors,sector["length"])]
 
+            ms = []
+
+            dd = find_entry(vl_sectors,sector["length"])
+            
+            for name_v, val in dd.items():
+                sm = 0
+                for ind in val:
+                    sm+= abs(vl_sectors[name_v][ind]['supportN']-vl_sectors[name_v][ind]['supportK'])
+            
+                ms.append(sm)
+
+            print(dd)
+            for 
+
+            sys.exit()
+            
+            if len(set(ms))>1:
+                nn = sector["name"]
+                raise Exception(f"Double chain vls have diffrent length on sector {nn}")
+
+            idd = {i:name for i, name in enumerate(vl_sectors.keys())}
+
+            
+            vl_sectors = [vl_sectors[idd[0]][i] for i in dd[idd[0]]]
+
+            
             for m, vl_sector in enumerate(vl_sectors):
                 N, K = vl_sector['supportN'], vl_sector['supportK']
                 drct = int((K-N)/abs(K-N))
@@ -220,12 +276,24 @@ for (n, k), sectors in okgt_info.items():
                 
         elif sector["type"] == "single_conductive":
             if sector["way_grounded"] == "not":
-                v = sector["point_grounded"]+1
+                v = 1 #sector["point_grounded"]+1
             elif sector["way_grounded"] in ["left", "right"]:
                 v = sector["point_grounded"]
             elif sector["way_grounded"] == "both":
                 v = sector["point_grounded"]-1
+            elif sector["way_grounded"] == "inside":
+                v = sector["point_grounded"]+1
             dl = sector["length"]/v
+            #print(dl)
+
+            if sector["countercable"]:
+                Y_cc = 1/R_cc(pz,dl,sector["D_countercable"],sector["H_countercable"])
+
+            else:
+                Y_cc = 0
+
+            
+
             for m in range(v):
                 if ind == 0 and m==0 and n in nodes_position:
                     i_old = nodes_position[n][0]
@@ -253,16 +321,27 @@ for (n, k), sectors in okgt_info.items():
                     lst_cc_conections.append({"is_vl":False, "s":start,"e":end,"length":dl,"sector":sector,})
                     okgt_to_cc[len(lst_conections)-1] = len(lst_cc_conections)-1
 
-            
+                
+                if grounded[m] is not None: 
+                    yz = (1/sector["point_grounded"] if grounded[m] in ["Yzy","both","both2"] else 0)+\
+                        (Y_cc/2 if grounded[m] in ["Ycc","both"] else 0)+(Y_cc if grounded[m] in ["Ycc2","both2"] else 0)     
+                    lst_zy.append({"type":"single","Rzy":yz,"p1":start[0]})
+
+                if grounded[v] is not None and m==v-1: 
+                    yz = (1/sector["point_grounded"] if grounded[v] in ["Yzy","both","both2"] else 0)+\
+                        (Y_cc/2 if grounded[v] in ["Ycc","both"] else 0)+(Y_cc if grounded[v] in ["Ycc2","both2"] else 0)        
+                    lst_zy.append({"type":"single","Rzy":yz,"p1":end[0]})
+
+                #
 
     if k not in nodes_position:
         nodes_position[k] = (i,j)
 
 
 #print(nodes_position)
-""" for row in lst_conections:
-    print(row) """
-
+""" for row in lst_zy:
+    print(row)
+ """
 def get_vl_sector_info(vl,branch,supports,dtype):
     #"phases", "conductors", "groundwires", "supports", "PSs"
     f = lambda ni,ki,ns,ks: (ni<ki and ns>=ni and ks<=ki) or (ni>ki and ns<=ni and ks>=ki)

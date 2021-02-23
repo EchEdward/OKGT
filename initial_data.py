@@ -5,7 +5,7 @@ description of property parameters:
 
 "way_grounded" : "left", "right", "not", "both"
 "type": "VL", "single", "single_dielectric"
-"PS": "left", "right", "not", "both"
+"PS": "left", "right", "not", "both","inside"
 "link_okgt" - generate automaticlu, without people
 """
 
@@ -29,7 +29,7 @@ okgt_info = {
             "X_countercable": 0.0,
             "D_countercable": 12,
             "point_grounded" : 3,
-            "way_grounded": "not",
+            "way_grounded": "both",
             "point_resistance": 30.0,
             "ground_resistance": 30.0,
         },
@@ -143,6 +143,17 @@ vl_info = {
                 "supportK" : 61,
             },
         ],
+        "commonchains":[
+            {
+                "link_branch": ("1","2"),
+                "supportN" : 1,
+                "supportK" : 51,
+                "other_vl_name": "VL #5",
+                "other_link_branch": ("1","2"),
+                "other_supportN" : 1,
+                "other_supportK" : 51,
+            },
+        ],
         "phases": [
             {
                 "link_branch": ("1","2"),
@@ -223,6 +234,12 @@ vl_info = {
             {
                 "link_branch": ("1","2"),
                 "supportN" : 1,
+                "supportK" : 51,
+                "support": "ПБ(п)110-2/8"
+            },
+            {
+                "link_branch": ("1","2"),
+                "supportN" : 51,
                 "supportK" : 61,
                 "support": "ПБ-110-1,3,11,13"
             },
@@ -286,6 +303,7 @@ vl_info = {
                 "supportK" : 1,
             },
         ],
+        "commonchains":[],
         "phases": [
             {
                 "link_branch": ("1","2"),
@@ -410,6 +428,7 @@ vl_info = {
                 "supportK" : 1,
             },
         ],
+        "commonchains":[],
         "phases": [
             {
                 "link_branch": ("1","2"),
@@ -621,6 +640,7 @@ vl_info = {
                 "supportK" : 1,
             },
         ],
+        "commonchains":[],
         "phases": [
             {
                 "link_branch": ("1","2"),
@@ -858,6 +878,149 @@ vl_info = {
             },
             {
                 "PS_name": "PS_10",
+                "resistance": 0.4,
+                "length": 0.02,
+            },
+        ],
+    },
+    "VL #5": {
+        "branches" : {
+            ("1","2") : {
+                "supportN" : 1,
+                "supportK" : 71,
+                "PS": "both",
+                "PS_name_1": "PS_1",
+                "PS_name_2": "PS_11",
+            },
+        },
+        "sectors": [
+            {
+                "type": "with_okgt",
+                "link_okgt": "one",
+                "lengthN": 3.3,
+                "lengthK": 5.0,
+                "link_branch": ("1","2"),
+                "supportN" : 12,
+                "supportK" : 26,
+            },
+            {
+                "type": "with_okgt",
+                "link_okgt": "one",
+                "lengthN": 0.0,
+                "lengthK": 3.3,
+                "link_branch": ("1","2"),
+                "supportN" : 1,
+                "supportK" : 12,
+            },
+            {
+                "type": "with_okgt",
+                "link_okgt": "one",
+                "lengthN": 5.0,
+                "lengthK": 10.0,
+                "link_branch": ("1","2"),
+                "supportN" : 26,
+                "supportK" : 51,
+            },
+            {
+                "type": "without_okgt",
+                "length": 4.0,
+                "link_branch": ("1","2"),
+                "supportN" : 51,
+                "supportK" : 71,
+            },
+        ],
+        "commonchains":[
+            {
+                "link_branch": ("1","2"),
+                "supportN" : 1,
+                "supportK" : 51,
+                "other_vl_name": "VL #1",
+                "other_link_branch": ("1","2"),
+                "other_supportN" : 1,
+                "other_supportK" : 51,
+            },
+        ],
+        "phases": [
+            {
+                "link_branch": ("1","2"),
+                "supportN" : 1,
+                "supportK" : 51,
+                "phase": "ABC"
+            },
+            {
+                "link_branch": ("1","2"),
+                "supportN" : 51,
+                "supportK" : 71,
+                "phase": "-BAC"
+            },
+        ],
+        "conductors":[
+            {
+                "link_branch": ("1","2"),
+                "supportN" : 1,
+                "supportK" : 71,
+                "conductor": "AC 70/11"
+            },
+        ],
+        "groundwires":[
+            {
+                "link_branch": ("1","2"),
+                "supportN" : 1,
+                "supportK" : 51,
+                "type": "one",
+                "is_okgt":"groundwire1",
+                "groundwire1": "ОКГТ-38"
+            },
+            {
+                "link_branch": ("1","2"),
+                "supportN" : 51,
+                "supportK" : 71,
+                "type": "one",
+                "is_okgt":None,
+                "groundwire1": "AC 70/11"
+            },
+        ],
+        "grounded": [
+            {
+                "link_branch": ("1","2"),
+                "supportN" : 1,
+                "supportK" : 31,
+                "type": "first",
+                "resistance": 30.0
+            },
+            {
+                "link_branch": ("1","2"),
+                "supportN" : 32,
+                "supportK" : 71,
+                "type": "first",
+                "resistance": 15.0
+            },
+        ],
+        "countercables":[
+            
+        ],
+        "supports":[
+            {
+                "link_branch": ("1","2"),
+                "supportN" : 1,
+                "supportK" : 51,
+                "support": "ПБ(л)110-2/8"
+            },
+            {
+                "link_branch": ("1","2"),
+                "supportN" : 51,
+                "supportK" : 71,
+                "support": "ПБ-110-1,3,11,13"
+            },
+        ],
+        "PSs":[
+            {
+                "PS_name": "PS_1",
+                "resistance": 0.5,
+                "length": 0.02,
+            },
+            {
+                "PS_name": "PS_11",
                 "resistance": 0.4,
                 "length": 0.02,
             },
