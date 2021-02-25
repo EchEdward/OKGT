@@ -382,7 +382,7 @@ def submatrix_putter(slices,SM, M):
 def main_calc(okgt_info, vl_info, pz=30):
     mp=(mu0*jp*(1/pz))**0.5
 
-    nodes_position = {}
+    
 
     i, j = 0, 0
 
@@ -398,14 +398,16 @@ def main_calc(okgt_info, vl_info, pz=30):
     okgt_to_cc = {}
     to_vls = {}
 
+    okgt_nodes = {}
+    vls_nodes = {}
     ps_vls = {}
     
 
     lst_zy = []
 
     for (n, k), sectors in okgt_info.items():
-        if n not in nodes_position:
-            nodes_position[n] = (i,j)
+        if n not in okgt_nodes:
+            okgt_nodes[n] = (i,j)
 
         for ind, sector in enumerate(sectors):
             if sector["type"] == "VL":
@@ -425,8 +427,8 @@ def main_calc(okgt_info, vl_info, pz=30):
                             sector_lst[t].append([nc,kc,dl,name,vl_sector['link_branch']])
 
                 for t, vl in enumerate(zip(*sector_lst)):
-                    if ind == 0 and t==0 and n in nodes_position:
-                        i_old = nodes_position[n][0]
+                    if ind == 0 and t==0 and n in okgt_nodes:
+                        i_old = okgt_nodes[n][0]
                         start = (i_old,j,-1)
                     else:
                         start = (i,j,-1)
@@ -452,8 +454,8 @@ def main_calc(okgt_info, vl_info, pz=30):
 
                 
             elif sector["type"] == "single_dielectric":
-                if ind == 0 and n in nodes_position:
-                    i_old = nodes_position[n][0]
+                if ind == 0 and n in okgt_nodes:
+                    i_old = okgt_nodes[n][0]
                     start = (i_old,j,-1)
                 else:
                     start = (i,j,-1)
@@ -483,8 +485,8 @@ def main_calc(okgt_info, vl_info, pz=30):
                 grounded = single_okgt_zy(sector,v)
                 
                 for m in range(v):
-                    if ind == 0 and m==0 and n in nodes_position:
-                        i_old = nodes_position[n][0]
+                    if ind == 0 and m==0 and n in okgt_nodes:
+                        i_old = okgt_nodes[n][0]
                         start = (i_old,j,-1)
                     else:
                         start = (i,j,-1)
@@ -516,8 +518,8 @@ def main_calc(okgt_info, vl_info, pz=30):
                     if grounded[v] is not None and m==v-1:      
                         lst_zy.append({"type":"single","Yzy":type_zy_chose(sector,grounded[v],Y_cc),"p1":end[0]})
 
-        if k not in nodes_position:
-            nodes_position[k] = (i,j)
+        if k not in okgt_nodes:
+            okgt_nodes[k] = (i,j)
 
 
     # Construct graph of transmission lines' links
@@ -652,6 +654,8 @@ def main_calc(okgt_info, vl_info, pz=30):
             if key[1] not in nodes_position:
                 nodes_position[key[1]] = (i,j)
 
+        vls_nodes[vl_name] = nodes_position
+
     s_i_сс, s_j_сс = i,j
 
 
@@ -708,6 +712,10 @@ def main_calc(okgt_info, vl_info, pz=30):
     trig_maker_ps = lambda lst,t=True: [(val["conductor"][0] is not None) and t if i==3 or i==4 else False for i,val in enumerate(lst)]
     key_maker_ps = lambda lst: ["phase_ps" if i!=3 and i!=4 else "groundwire_ps" for i in range(len(lst))]
 
+
+    previous_sector = None
+
+
     for i in range(0,len(vl_lst),5):
         key = tuple(vl_lst[i][j] for j in ["name_vl","link_branch","supportN","supportK"])
         if (key,vl_lst[i]['is_Ps_sector']) not in calculated_vl and not vl_lst[i]['is_Ps_sector']:
@@ -722,6 +730,8 @@ def main_calc(okgt_info, vl_info, pz=30):
             calculated_vl.add((key,vl_lst[i]['is_Ps_sector']))
             slices = [(0,4,vl_lst[i]["start"][1],vl_lst[i+4]["start"][1])]
             sl=0
+
+            pos = (3 if vl_lst[i+3]["conductor"][1] else 4) if vl_lst[i]["type"]=="with_okgt" else None
 
             for j in isOtherVls:
                 pt = vl_lst[to_vls[j]:to_vls[j]+5]
@@ -741,7 +751,7 @@ def main_calc(okgt_info, vl_info, pz=30):
                 k.append("okgt_vl")
                 trig.append(True)
                 slices.append((sl,sl,okgt_lst[isOkgt]["start"][1],okgt_lst[isOkgt]["start"][1]))
-                pos = 3 if vl_lst[i+3]["conductor"][1] else 4
+                #pos = 3 if vl_lst[i+3]["conductor"][1] else 4
                 for j in range(5,len(d),5):
                     pos_n = 3 if d[j+3]["conductor"][1] else 4
                     if pos != pos_n:
@@ -755,6 +765,85 @@ def main_calc(okgt_info, vl_info, pz=30):
                 slices.append((sl,sl,cc_lst_nw[isCC]["start"][1],cc_lst_nw[isCC]["start"][1]))
                 d.append(cc_lst_nw[isCC])
                 shift = cc_lst_nw[isCC]["H_countercable"]+0.1
+
+
+            current_sector = {k:vl_lst[i][k] for k in ["name_vl","link_branch","supportN","supportK","type"]}
+            current_sector["link"] = vl_lst[i:i+5]
+            current_sector["okgt"] = (pos,isOkgt)
+            current_sector["other_vls"] = isOtherVls
+
+            if previous_sector is not None and current_sector is not None: 
+                # connection groundwire to okgt when okgt leaves or joins to vl
+                if previous_sector["type"]=="without_okgt" and current_sector["type"]=="with_okgt":
+                    if (previous_sector["link_branch"]==current_sector["link_branch"] and\
+                        previous_sector["supportK"]==current_sector["supportN"]) or\
+                        (previous_sector["link"][0]["end"][0]==current_sector["link"][0]["start"][0]):
+
+                        i_okgt = okgt_lst[current_sector["okgt"][1]]["start"][0]
+                        i_vl = previous_sector["link"][current_sector["okgt"][0]]["end"][0]
+
+                        lst_zy.append({'type': 'bypass3', 'points': [(i_okgt, i_vl)]})
+                        #print("start",previous_sector["name_vl"],previous_sector["link_branch"],previous_sector["supportN"],previous_sector["supportK"])
+
+                elif previous_sector["type"]=="with_okgt" and current_sector["type"]=="without_okgt":
+                    if (previous_sector["link_branch"]==current_sector["link_branch"] and\
+                        previous_sector["supportK"]==current_sector["supportN"]) or\
+                        (previous_sector["link"][0]["end"][0]==current_sector["link"][0]["start"][0]):
+
+                        i_okgt = okgt_lst[previous_sector["okgt"][1]]["end"][0]
+                        i_vl = current_sector["link"][previous_sector["okgt"][0]]["start"][0]
+
+                        lst_zy.append({'type': 'bypass4', 'points': [(i_okgt, i_vl)]})
+                        #print("end",previous_sector["name_vl"],previous_sector["link_branch"],previous_sector["supportN"],previous_sector["supportK"])
+
+
+                # connection groundwire to other groundwire when vl become multichain or singlechain
+
+                if len(previous_sector["other_vls"]) < len(current_sector["other_vls"]):
+                    if (previous_sector["link_branch"]==current_sector["link_branch"] and\
+                        previous_sector["supportK"]==current_sector["supportN"]) or\
+                        (previous_sector["link"][0]["end"][0]==current_sector["link"][0]["start"][0]):
+
+                        links = set(previous_sector["other_vls"]).symmetric_difference(set(current_sector["other_vls"]))
+
+                        point_lst = []
+                        for vl_link in links:
+                            pt = vl_lst[to_vls[vl_link]:to_vls[vl_link]+5]
+
+                            i_m1 = current_sector["link"][3]["start"][0]
+                            i_m2 = current_sector["link"][4]["start"][0]
+
+                            i_n1 = pt[3]["start"][0]
+                            i_n2 = pt[4]["start"][0]
+
+                            point_lst+=[(i_m1,i_n1),(i_m2,i_n2)]
+                        if len(links)!=0:
+                            lst_zy.append({'type': 'bypass5', 'points': point_lst})
+
+                elif len(previous_sector["other_vls"]) > len(current_sector["other_vls"]):
+                    if (previous_sector["link_branch"]==current_sector["link_branch"] and\
+                        previous_sector["supportK"]==current_sector["supportN"]) or\
+                        (previous_sector["link"][0]["end"][0]==current_sector["link"][0]["start"][0]): 
+
+                        links = set(previous_sector["other_vls"]).symmetric_difference(set(current_sector["other_vls"]))
+
+                        point_lst = []
+                        for vl_link in links:
+                            pt = vl_lst[to_vls[vl_link]:to_vls[vl_link]+5]
+
+                            i_m1 = previous_sector["link"][3]["end"][0]
+                            i_m2 = previous_sector["link"][4]["end"][0]
+
+                            i_n1 = pt[3]["end"][0]
+                            i_n2 = pt[4]["end"][0]
+
+                            point_lst+=[(i_m1,i_n1),(i_m2,i_n2)]
+                        if len(links)!=0:
+                            lst_zy.append({'type': 'bypass5', 'points': point_lst})
+                        
+            previous_sector = current_sector
+            
+
 
 
         elif (key,vl_lst[i]['is_Ps_sector']) not in calculated_vl and vl_lst[i]['is_Ps_sector']:
@@ -860,14 +949,23 @@ def main_calc(okgt_info, vl_info, pz=30):
         if Z[i,i] == 0:
             print(i) 
 
+    print("="*10)
 
     for i in lst_zy:
-        if i["type"]=="bypass":
+        if i["type"]=="bypass3":
             print(i)
 
-            
+    print("="*10)
 
-    
+    for i in lst_zy:
+        if i["type"]=="bypass4":
+            print(i)
+
+    print("="*10)        
+
+    for i in lst_zy:
+        if i["type"]=="bypass5":
+            print(i)
 
 
 main_calc(okgt_info, vl_info)
