@@ -8,7 +8,7 @@ import scipy.sparse.linalg as linalg
 
 from openpyxl import load_workbook
 
-from initial_data import okgt_info, vl_info
+from initial_data import okgt_info, vl_info, ps_info
 
 import sys
 
@@ -66,6 +66,7 @@ sh_int=np.arange(0, 1, 0.00001)
 
 ro_fe =  0.1 #Ом*мм2/м
 R_isol = 10**8
+R_bypass = 10**-5
 
 
 def get_vl_sector(key,vl_info):
@@ -379,7 +380,31 @@ def submatrix_putter(slices,SM, M):
         M[sl2[2]:sl2[3]+1,sl1[2]:sl1[3]+1] = SM[sl2[0]:sl2[1]+1,sl1[0]:sl1[1]+1]
 
 
-def main_calc(okgt_info, vl_info, pz=30):
+def grounded_params(vl_name,branch,p,vl_info):
+    grounded = vl_info[vl_name]["grounded"]
+    for item in grounded:
+        if item["link_branch"]==branch and (item["supportN"]<=p<=item["supportK"] or item["supportN"]>=p>=item["supportK"]):
+            return {"type":item["type"],"resistance":item["resistance"]}
+
+def Y_matrix_builder(lst_zy,s_i_end):
+    Y = sparse.lil_matrix((s_i_end, s_i_end),dtype=np.complex128)
+
+    for item in lst_zy:
+        if item["type"]=='bypass' or item["type"]=="to_ground":
+            for (p1,p2) in item["points"]:
+                Y[p1,p1] += 1/R_bypass
+                Y[p2,p2] += 1/R_bypass
+                Y[p1,p2] -= 1/R_bypass
+                Y[p2,p1] -= 1/R_bypass
+
+            if "ground" in item:
+               Y[item["ground"],item["ground"]]+= item["Yzy"]
+        
+
+    
+    return Y
+
+def main_calc(okgt_info, vl_info, ps_info, pz=30):
     mp=(mu0*jp*(1/pz))**0.5
 
     
@@ -513,10 +538,10 @@ def main_calc(okgt_info, vl_info, pz=30):
                         okgt_to_cc[len(okgt_lst)-1] = len(cc_lst)-1
 
                     if grounded[m] is not None:     
-                        lst_zy.append({"type":"single","Yzy":type_zy_chose(sector,grounded[m],Y_cc),"p1":start[0]})
+                        lst_zy.append({"type":"to_ground","Yzy":type_zy_chose(sector,grounded[m],Y_cc),"points":[],"ground":start[0]})
 
                     if grounded[v] is not None and m==v-1:      
-                        lst_zy.append({"type":"single","Yzy":type_zy_chose(sector,grounded[v],Y_cc),"p1":end[0]})
+                        lst_zy.append({"type":"to_ground","Yzy":type_zy_chose(sector,grounded[v],Y_cc),"points":[],"ground":end[0]})
 
         if k not in okgt_nodes:
             okgt_nodes[k] = (i,j)
@@ -684,11 +709,7 @@ def main_calc(okgt_info, vl_info, pz=30):
 
 
     A = sparse.lil_matrix((s_i_end, s_j_end),dtype=np.float64)
-    """ okgt_lst = []
-    vl_lst = []
-    cc_lst = []
-    cc_lst_nw = [] """
-
+    
     for item in okgt_lst: 
         A[item["start"][:2]] = item["start"][2]
         A[item["end"][:2]] = item["end"][2]
@@ -713,7 +734,9 @@ def main_calc(okgt_info, vl_info, pz=30):
     key_maker_ps = lambda lst: ["phase_ps" if i!=3 and i!=4 else "groundwire_ps" for i in range(len(lst))]
 
 
-    previous_sector = None
+    previous_sector = {}
+
+    was_grounded = set()
 
 
     for i in range(0,len(vl_lst),5):
@@ -772,7 +795,7 @@ def main_calc(okgt_info, vl_info, pz=30):
             current_sector["okgt"] = (pos,isOkgt)
             current_sector["other_vls"] = isOtherVls
 
-            if previous_sector is not None and current_sector is not None: 
+            if previous_sector  and current_sector: 
                 # connection groundwire to okgt when okgt leaves or joins to vl
                 if previous_sector["type"]=="without_okgt" and current_sector["type"]=="with_okgt":
                     if (previous_sector["link_branch"]==current_sector["link_branch"] and\
@@ -782,7 +805,7 @@ def main_calc(okgt_info, vl_info, pz=30):
                         i_okgt = okgt_lst[current_sector["okgt"][1]]["start"][0]
                         i_vl = previous_sector["link"][current_sector["okgt"][0]]["end"][0]
 
-                        lst_zy.append({'type': 'bypass3', 'points': [(i_okgt, i_vl)]})
+                        lst_zy.append({'type': 'bypass', 'points': [(i_okgt, i_vl)]})
                         #print("start",previous_sector["name_vl"],previous_sector["link_branch"],previous_sector["supportN"],previous_sector["supportK"])
 
                 elif previous_sector["type"]=="with_okgt" and current_sector["type"]=="without_okgt":
@@ -793,7 +816,7 @@ def main_calc(okgt_info, vl_info, pz=30):
                         i_okgt = okgt_lst[previous_sector["okgt"][1]]["end"][0]
                         i_vl = current_sector["link"][previous_sector["okgt"][0]]["start"][0]
 
-                        lst_zy.append({'type': 'bypass4', 'points': [(i_okgt, i_vl)]})
+                        lst_zy.append({'type': 'bypass', 'points': [(i_okgt, i_vl)]})
                         #print("end",previous_sector["name_vl"],previous_sector["link_branch"],previous_sector["supportN"],previous_sector["supportK"])
 
 
@@ -818,7 +841,7 @@ def main_calc(okgt_info, vl_info, pz=30):
 
                             point_lst+=[(i_m1,i_n1),(i_m2,i_n2)]
                         if len(links)!=0:
-                            lst_zy.append({'type': 'bypass5', 'points': point_lst})
+                            lst_zy.append({'type': 'bypass', 'points': point_lst})
 
                 elif len(previous_sector["other_vls"]) > len(current_sector["other_vls"]):
                     if (previous_sector["link_branch"]==current_sector["link_branch"] and\
@@ -839,9 +862,69 @@ def main_calc(okgt_info, vl_info, pz=30):
 
                             point_lst+=[(i_m1,i_n1),(i_m2,i_n2)]
                         if len(links)!=0:
-                            lst_zy.append({'type': 'bypass5', 'points': point_lst})
+                            lst_zy.append({'type': 'bypass', 'points': point_lst})
                         
             previous_sector = current_sector
+
+            # 
+            st_node = (vl_lst[i]["start"][0])
+            end_node = (vl_lst[i]["end"][0])
+
+            if st_node not in was_grounded:
+                params = grounded_params(*key[:2],key[2],vl_info)
+                if params is not None:
+                    was_grounded.add(st_node)
+                    i_t1 = vl_lst[i+3]["start"][0]
+                    i_t2 = vl_lst[i+4]["start"][0]
+                    if isOkgt is not None:
+                        i_okgt = okgt_lst[isOkgt]["start"][0]
+                        if params["type"]=="first":
+                            if pos == 3:
+                                lst_zy.append({'type': 'to_ground', 'points': [(i_okgt,i_t1)],"ground":i_t1,"Yzy":1/params["resistance"]})
+                            else:
+                                lst_zy.append({'type': 'to_ground', 'points': [],"ground":i_t1,"Yzy":1/params["resistance"]})
+                        elif params["type"]=="second":
+                            if pos == 3:
+                                lst_zy.append({'type': 'to_ground', 'points': [],"ground":i_t2,"Yzy":1/params["resistance"]})
+                            else:
+                                lst_zy.append({'type': 'to_ground', 'points': [(i_okgt,i_t2)],"ground":i_t2,"Yzy":1/params["resistance"]})
+                        elif params["type"]=="both":
+                            lst_zy.append({'type': 'to_ground', 'points': [(i_okgt,i_t1),(i_t1,i_t2)],"ground":i_t1,"Yzy":1/params["resistance"]})
+                    else:
+                        if params["type"]=="first":  
+                            lst_zy.append({'type': 'to_ground', 'points': [],"ground":i_t1,"Yzy":1/params["resistance"]})  
+                        elif params["type"]=="second":
+                            lst_zy.append({'type': 'to_ground', 'points': [],"ground":i_t2,"Yzy":1/params["resistance"]})
+                        elif params["type"]=="both":
+                            lst_zy.append({'type': 'to_ground', 'points': [(i_t1,i_t2)],"ground":i_t1,"Yzy":1/params["resistance"]})
+
+            if end_node not in was_grounded:
+                params = grounded_params(*key[:2],key[3],vl_info)
+                if params is not None:
+                    was_grounded.add(end_node)
+                    i_t1 = vl_lst[i+3]["end"][0]
+                    i_t2 = vl_lst[i+4]["end"][0]
+                    if isOkgt is not None:
+                        i_okgt = okgt_lst[isOkgt]["end"][0]
+                        if params["type"]=="first":
+                            if pos == 3:
+                                lst_zy.append({'type': 'to_ground', 'points': [(i_okgt,i_t1)],"ground":i_t1,"Yzy":1/params["resistance"]})
+                            else:
+                                lst_zy.append({'type': 'to_ground', 'points': [],"ground":i_t1,"Yzy":1/params["resistance"]})
+                        elif params["type"]=="second":
+                            if pos == 3:
+                                lst_zy.append({'type': 'to_ground', 'points': [],"ground":i_t2,"Yzy":1/params["resistance"]})
+                            else:
+                                lst_zy.append({'type': 'to_ground', 'points': [(i_okgt,i_t2)],"ground":i_t2,"Yzy":1/params["resistance"]})
+                        elif params["type"]=="both":
+                            lst_zy.append({'type': 'to_ground', 'points': [(i_okgt,i_t1),(i_t1,i_t2)],"ground":i_t1,"Yzy":1/params["resistance"]})
+                    else:
+                        if params["type"]=="first":  
+                            lst_zy.append({'type': 'to_ground', 'points': [],"ground":i_t1,"Yzy":1/params["resistance"]})  
+                        elif params["type"]=="second":
+                            lst_zy.append({'type': 'to_ground', 'points': [],"ground":i_t2,"Yzy":1/params["resistance"]})
+                        elif params["type"]=="both":
+                            lst_zy.append({'type': 'to_ground', 'points': [(i_t1,i_t2)],"ground":i_t1,"Yzy":1/params["resistance"]})
             
 
 
@@ -858,6 +941,9 @@ def main_calc(okgt_info, vl_info, pz=30):
             slices = [(0,4,vl_lst[i]["start"][1],vl_lst[i+4]["start"][1])]
             sl=0
 
+            i_p1 = vl_lst[i]["start" if ps_vls[key][2]=="left" else "end"][0]
+            points_zy = [[i_p1,vl_lst[i+1+j]["start" if ps_vls[key][2]=="left" else "end"][0]] for j in range(4)]
+
             for j in isOtherVls_ps:
                 pt = vl_lst[ps_vls[j][0]:ps_vls[j][0]+5]
                 if vl_lst[i]["length"] != pt[0]["length"]:
@@ -869,17 +955,21 @@ def main_calc(okgt_info, vl_info, pz=30):
                 slices.append((sl,sl+4,pt[0]["start"][1],pt[4]["start"][1]))
                 calculated_vl.add((j,vl_lst[i]['is_Ps_sector']))
 
+                points_zy += [[i_p1,j["start" if ps_vls[key][2]=="left" else "end"][0]] for j in pt]
+
             dl = vl_lst[i]["length"]
 
             if isOkgt is not None:
                 pos = 3 if vl_lst[i+3]["conductor"][1] else 4
-                tp = ps_vls[key][2]
                 sides = ("end","start") if ps_vls[key][2]=="left" else ("start","end")
                 
                 node1 = vl_lst[i+pos][sides[0]][0]
                 node2 = okgt_lst[isOkgt][sides[1]][0]
 
                 lst_zy.append({"type":"bypass","points":[(node1,node2)]})
+
+            
+            lst_zy.append({'type': 'to_ground', 'points': points_zy,"ground":i_p1,"Yzy":1/ps_info[ps_vls[key][1]]["resistance"]})
 
 
         else: 
@@ -944,28 +1034,34 @@ def main_calc(okgt_info, vl_info, pz=30):
             
         submatrix_putter(slices,Carson([X,Y,R,r,trig,pz,dl]), Z)
 
+    Yadd = Y_matrix_builder(lst_zy,s_i_end)
 
-    for i in range(s_j_end):
+    J_make_lst = [] 
+    for key, val in ps_vls.items():
+        a = {"vl_name":key[0],
+            "ps_name":val[1],
+            "sl1":(vl_lst[val[0]]["start"][0],vl_lst[val[0]+2]["start"][0]+1),
+            "sl2":(vl_lst[val[0]]["end"][0],vl_lst[val[0]+2]["end"][0]+1),
+            "direction": 1 if val[2]=="left" else -1,
+            }
+        
+        J_make_lst.append(a)
+
+    
+
+    #ps_vls[(vl_name,key,nc,kc)] = (len(vl_lst),branch["PS_name_2"],"right")
+    """ for i in range(s_j_end):
         if Z[i,i] == 0:
-            print(i) 
+            print(i)  """
 
-    print("="*10)
-
-    for i in lst_zy:
-        if i["type"]=="bypass3":
-            print(i)
-
-    print("="*10)
-
-    for i in lst_zy:
-        if i["type"]=="bypass4":
-            print(i)
+    
 
     print("="*10)        
 
-    for i in lst_zy:
-        if i["type"]=="bypass5":
-            print(i)
+    for i in J_make_lst:
+        print(i)
+
+    
 
 
-main_calc(okgt_info, vl_info)
+main_calc(okgt_info, vl_info, ps_info)
