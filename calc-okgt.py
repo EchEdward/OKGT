@@ -399,15 +399,104 @@ def Y_matrix_builder(lst_zy,s_i_end):
 
             if "ground" in item:
                Y[item["ground"],item["ground"]]+= item["Yzy"]
-        
 
-    
     return Y
 
-def main_calc(okgt_info, vl_info, ps_info, pz=30):
-    mp=(mu0*jp*(1/pz))**0.5
 
+def chain_sort(arr,key=lambda x:(x[0],x[1])):
+    new_arr = [*arr[:1]]
+    work = True
+    while work:
+        for i in range(len(arr)):
+            if key(arr[i])[1]==key(new_arr[0])[0]:
+                new_arr.insert(0,arr[i])
+                break
+            elif key(arr[i])[0]==key(new_arr[-1])[1]:
+                new_arr.insert(len(new_arr),arr[i])
+                break
+        else:
+            work = False
+
+    if len(arr)==len(new_arr):
+        return new_arr
+    else:
+        raise Exception("Elements of arr don't form a sequence")
+
+find_brances = lambda arr,n:list(filter(lambda x: n in x, arr))
+
+def ps_branch(arr,n):
+    lst = find_brances(arr,n)
+
+    if len(lst)!=1:
+        raise Exception
+
+    branch = lst[0]
+    return (branch,1 if branch[0]==n else -1)
+
+def other_branches(arr,n):
+    return [(i,1 if i[0]==n else -1) for i in find_brances(arr,n)]
+
+def support_range(n,k,r):
+    if n>k and r==1:
+        return range(n,k-1,-1)
+    elif n<k and r==1:
+        return range(n,k+1)
+    elif n>k and r==-1:
+        return range(k,n+1)
+    elif n<k and r==-1:
+        return range(k,n-1,-1)
+
+def recursion_add_length(ps,l,node,vl_name,ps_name,branch_l,result):          
+    for s in branch_l[ps[0]][::ps[1]]:
+        dl = s[2]/abs(s[1]-s[0])
+        for p in support_range(*s[:2],ps[1]):
+            if (ps[0],p) not in result[vl_name][ps_name]:
+                result[vl_name][ps_name][(ps[0],p)]=l
+                l+=dl
+
+    l-=dl
+    new_node = ps[0][1] if ps[0][0]==node else ps[0][0]
+    other = other_branches([i for i in branch_l.keys() if i!=ps[0]], new_node)
     
+
+    for i in other:
+        if i[0]!=ps[0]:
+            recursion_add_length(i,l,new_node,vl_name,ps_name,branch_l,result)
+
+
+def length_to_ps_builder(vl_info):
+    result = {}
+    k1 = lambda i: (i["supportN"],i["supportK"],abs(i["lengthK"]-i["lengthN"]))
+    k2 = lambda i: (i["supportN"],i["supportK"],abs(i["length"]))
+
+    for vl_name, params in vl_info.items():
+        ps_nodes = {}
+        branch_l = {}
+        for branch, br_dt in params["branches"].items():
+            if br_dt["PS"] == "left":
+                ps_nodes[br_dt["PS_name_1"]]=branch[0]
+            elif br_dt["PS"] == "right":
+                ps_nodes[br_dt["PS_name_2"]]=branch[1]
+            if br_dt["PS"] == "both":
+                ps_nodes[br_dt["PS_name_1"]]=branch[0]
+                ps_nodes[br_dt["PS_name_2"]]=branch[1]
+            
+            sectors = chain_sort([sect for sect in params["sectors"] if sect["link_branch"]==branch],key=lambda x:(x["supportN"],x["supportK"]))
+            branch_l[branch] = [k1(i) if i["type"]=="with_okgt" else k2(i) for i in sectors]
+
+        result[vl_name] = {}
+        
+        for ps_name, node in ps_nodes.items():
+            result[vl_name][ps_name] = {}
+            l = 0
+            ps = ps_branch(list(branch_l.keys()),node)
+
+            recursion_add_length(ps,l,node,vl_name,ps_name,branch_l,result)
+
+    return result         
+
+
+def main_calc(okgt_info, vl_info, ps_info, pz=30):   
 
     i, j = 0, 0
 
@@ -1056,12 +1145,19 @@ def main_calc(okgt_info, vl_info, ps_info, pz=30):
 
     
 
-    print("="*10)        
+    """ print("="*10)        
 
     for i in J_make_lst:
-        print(i)
+        print(i) """
+
+    
 
     
 
 
-main_calc(okgt_info, vl_info, ps_info)
+#main_calc(okgt_info, vl_info, ps_info)
+result = length_to_ps_builder(vl_info)
+
+for key, val in result["VL #4"]["PS_10"].items():
+    print(key, val)
+
