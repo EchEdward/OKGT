@@ -2,13 +2,17 @@ import numpy as np
 
 from scipy.integrate import simps
 from scipy.constants import epsilon_0
+from scipy.optimize import curve_fit
+from scipy.interpolate import interp1d
 
 import scipy.sparse as sparse
 import scipy.sparse.linalg as linalg
 
+from functools import reduce
+
 from openpyxl import load_workbook
 
-from initial_data import okgt_info, vl_info, ps_info
+from initial_data import okgt_info, vl_info, ps_info, rpa_info
 
 import sys
 
@@ -51,6 +55,7 @@ def load_data():
                 "r":Kat.cell(row=18,column=j).value,
                 "R0":Kat.cell(row=19,column=j).value,
                 "Id":Kat.cell(row=20,column=j).value,
+                "Bsc":Kat.cell(row=21,column=j).value,
             }
         j+=1
 
@@ -493,10 +498,97 @@ def length_to_ps_builder(vl_info):
 
             recursion_add_length(ps,l,node,vl_name,ps_name,branch_l,result)
 
-    return result         
+    return result   
+
+def Isc_func(x,a,b,c):
+    return c+b/(x+a) 
+    #return a * np.exp(-b * x) + c
+
+def Isc_get_maker(rpa_info):  
+    result = {} 
+    for key, val in rpa_info.items():
+        I_sc = val["I_sc"]
+        L_sc = val["L_sc"]
+
+        if I_sc[0]>I_sc[-1]:
+            L_sc = [i-L_sc[0] if L_sc[0]<L_sc[-1] else L_sc[0]-i for i in L_sc] 
+
+        else:
+            I_sc.reverse()
+            L_sc.reverse()
+            L_sc = [i-L_sc[0] if L_sc[0]<L_sc[-1] else L_sc[0]-i for i in L_sc]
+
+        
+        interp = interp1d(L_sc, I_sc)
+        popt, _ = curve_fit(Isc_func, L_sc, I_sc, maxfev=10**6) #, maxfev=10**6
+
+        result[key] = {"interpFunc":interp,"aproFunc":lambda x, p=popt: Isc_func(x,*p)}
+
+    return result
 
 
-def main_calc(okgt_info, vl_info, ps_info, pz=30):   
+def J_matrix_builder(point_sc,J_make_lst,length_to_ps_lst,rpa_info,Isc_funcs,s_i_end,s_j_end):
+    vl_name = point_sc['vl_name']
+    branch = point_sc['branch']
+    support = point_sc['support']
+    ps_lst = point_sc['ps_lst']
+
+    Isc = {i: Isc_funcs[(vl_name,i)]["aproFunc"](length_to_ps_lst[vl_name][i][(branch),support]) for i in ps_lst}
+
+    T_m = {}
+
+    for ps in ps_lst:
+        inf = rpa_info[(vl_name,ps)]
+        const_t = inf["Tswitch"] + inf["Tautomation"]
+        Iy =  min(map(lambda x,y=Isc[ps]: (y-x if y>=x else float("inf"),x) , inf["rpa_I_setting"]))
+        ind = inf["rpa_I_setting"].index(Iy[1]) if Iy[0]!=float("inf") else None
+
+        if ind is None:
+            raise Exception("Current of relay settings more than I short {vl_name} {ps}")
+
+        I_t = [(Isc[ps],const_t+inf["rpa_time_setting"][ind])]
+
+        for i in range(inf["arc_times"]):
+            I_t.append((0,inf["arc_pause"][i]))
+            I_t.append((Isc[ps],const_t+inf["rpa_time_setting"][ind]-inf["arc_setting"][i][ind]))
+
+        T_m[ps] = I_t
+
+    Time_line = []
+    t = 0
+    while True:
+        lst_ind = {}
+        for ps in T_m:
+            dt = 0
+            for p in T_m[ps]:
+                if dt<=t<dt+p[1]: 
+                    lst_ind[ps] = (p[0],dt+p[1]-t)
+                    break
+                else:
+                    dt+=p[1]
+            else:
+                lst_ind[ps] = (0,float("inf"))
+
+        t_old = t
+        
+        t += min(lst_ind.items(),key=lambda x: x[1][1])[1][1]
+
+        if t == float("inf"): 
+            break
+        
+        I = {ps:i[0] for ps, i in lst_ind.items()}
+
+        if sum(I.values())!=0:
+            Time_line.append((t-t_old,I))
+
+        
+    print(T_m)  
+
+
+    print(Time_line)
+
+
+def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30):   
 
     i, j = 0, 0
 
@@ -812,6 +904,22 @@ def main_calc(okgt_info, vl_info, ps_info, pz=30):
         A[item["end"][:2]] = item["end"][2]
 
 
+    J_make_lst = {}
+    vl_to_ps = {}
+    for key, val in ps_vls.items():
+        a = {"sl1":(vl_lst[val[0]]["start"][0],vl_lst[val[0]+2]["start"][0]+1),
+            "sl2":(vl_lst[val[0]]["end"][0],vl_lst[val[0]+2]["end"][0]+1),
+            "direction": 1 if val[2]=="left" else -1,
+            }
+        
+        J_make_lst[(key[0],val[1])] = a
+
+        if key[0] not in vl_to_ps:
+            vl_to_ps[key[0]] = []
+
+        vl_to_ps[key[0]].append(val[1])
+
+
     Z = sparse.lil_matrix((s_j_end, s_j_end),dtype=np.complex128)
     #print(s_j_end, s_j_end)
 
@@ -826,6 +934,11 @@ def main_calc(okgt_info, vl_info, ps_info, pz=30):
     previous_sector = {}
 
     was_grounded = set()
+
+    okgt_sc = set()
+    okgt_sc_lst = []
+
+    okgt_max = {}
 
 
     for i in range(0,len(vl_lst),5):
@@ -863,12 +976,20 @@ def main_calc(okgt_info, vl_info, ps_info, pz=30):
                 k.append("okgt_vl")
                 trig.append(True)
                 slices.append((sl,sl,okgt_lst[isOkgt]["start"][1],okgt_lst[isOkgt]["start"][1]))
-                #pos = 3 if vl_lst[i+3]["conductor"][1] else 4
+                
                 for j in range(5,len(d),5):
                     pos_n = 3 if d[j+3]["conductor"][1] else 4
                     if pos != pos_n:
-                        raise Exception("OKGT can't be located on diffetent plases of miltichain support")
+                        raise Exception("OKGT can't be located on diffetent plases of multichain support")
+                
+
+                okgt_max[okgt_lst[isOkgt]["start"][1]] = {
+                    "conductor": d[pos]["conductor"][0],
+                    "links": [(d[j]["name_vl"],d[j]["link_branch"],d[j]["supportN"],d[j]["supportK"]) for j in range(0,len(d),5)]
+                }
+
                 d.append(vl_lst[i+pos])
+
                 
             if isCC is not None:
                 sl+=1
@@ -1016,6 +1137,31 @@ def main_calc(okgt_info, vl_info, ps_info, pz=30):
                             lst_zy.append({'type': 'to_ground', 'points': [(i_t1,i_t2)],"ground":i_t1,"Yzy":1/params["resistance"]})
             
 
+            if isOkgt is not None:
+                for pt in ([vl_lst[i:i+5]]+[vl_lst[to_vls[j]:to_vls[j]+5] for j in isOtherVls]):
+                    if (pt[0]["name_vl"],okgt_lst[isOkgt]["start"][0]) not in okgt_sc:
+                        sc_point = {
+                            "vl_name":pt[0]["name_vl"],
+                            "branch":pt[0]["link_branch"],
+                            "support":pt[0]["supportN"],
+                            "i_okgt":okgt_lst[isOkgt]["start"][0],
+                            "i_vl":[pt[j]["start"][0] for j in range(3)],
+                            "ps_lst":vl_to_ps[pt[0]["name_vl"]],
+                        }
+                        okgt_sc_lst.append(sc_point)
+                        okgt_sc.add((pt[0]["name_vl"],okgt_lst[isOkgt]["start"][0]))
+
+                    if (pt[0]["name_vl"],okgt_lst[isOkgt]["end"][0]) not in okgt_sc:
+                        sc_point = {
+                            "vl_name":pt[0]["name_vl"],
+                            "branch":pt[0]["link_branch"],
+                            "support":pt[0]["supportK"],
+                            "i_okgt":okgt_lst[isOkgt]["end"][0],
+                            "i_vl":[pt[j]["end"][0] for j in range(3)],
+                            "ps_lst":vl_to_ps[pt[0]["name_vl"]],
+                        }
+                        okgt_sc_lst.append(sc_point)
+                        okgt_sc.add((pt[0]["name_vl"],okgt_lst[isOkgt]["end"][0]))
 
 
         elif (key,vl_lst[i]['is_Ps_sector']) not in calculated_vl and vl_lst[i]['is_Ps_sector']:
@@ -1124,18 +1270,11 @@ def main_calc(okgt_info, vl_info, ps_info, pz=30):
         submatrix_putter(slices,Carson([X,Y,R,r,trig,pz,dl]), Z)
 
     Yadd = Y_matrix_builder(lst_zy,s_i_end)
+    Isc_funcs = Isc_get_maker(rpa_info)
+    length_to_ps_lst = length_to_ps_builder(vl_info)
 
-    J_make_lst = [] 
-    for key, val in ps_vls.items():
-        a = {"vl_name":key[0],
-            "ps_name":val[1],
-            "sl1":(vl_lst[val[0]]["start"][0],vl_lst[val[0]+2]["start"][0]+1),
-            "sl2":(vl_lst[val[0]]["end"][0],vl_lst[val[0]+2]["end"][0]+1),
-            "direction": 1 if val[2]=="left" else -1,
-            }
-        
-        J_make_lst.append(a)
-
+    
+    J_matrix_builder(okgt_sc_lst[0],J_make_lst,length_to_ps_lst,rpa_info,Isc_funcs,s_i_end,s_j_end)
     
 
     #ps_vls[(vl_name,key,nc,kc)] = (len(vl_lst),branch["PS_name_2"],"right")
@@ -1147,17 +1286,26 @@ def main_calc(okgt_info, vl_info, ps_info, pz=30):
 
     """ print("="*10)        
 
-    for i in J_make_lst:
+    for i, j in J_make_lst.items():
+        print(i,j)
+
+
+    print(vl_to_ps)
+
+    print("="*10)
+    for i in okgt_sc_lst:
         print(i) """
 
-    
+    """ print("="*10)
+    for i,j in okgt_max.items():
+        print(i,j) """
 
-    
+   
 
 
-#main_calc(okgt_info, vl_info, ps_info)
-result = length_to_ps_builder(vl_info)
+main_calc(okgt_info, vl_info, ps_info, rpa_info)
+""" result = length_to_ps_builder(vl_info)
 
 for key, val in result["VL #4"]["PS_10"].items():
-    print(key, val)
+    print(key, val) """
 
