@@ -8,13 +8,9 @@ from scipy.interpolate import interp1d
 import scipy.sparse as sparse
 import scipy.sparse.linalg as linalg
 
-from functools import reduce
-
 from openpyxl import load_workbook
 
-from initial_data import okgt_info, vl_info, ps_info, rpa_info
 
-import sys
 
 def load_data():
     """ Load catalog of parametrs of cunductors and supports  """
@@ -342,15 +338,16 @@ def Carson(data):
                     M[a,b]=R[a]*l + jp*mu0/2/np.pi*(np.log(2*abs(Y[a])/r[a])+2*simps(Cars_ii(sh_int,Y[a],r[a],mp),sh_int))*l*10**3
                 elif a == b and not trig[a]:
                     M[a,b]=R[a]
-                elif a!=b and (not trig[a] or not trig[b]):
-                    M[a,b]=M[b,a]=0
-                elif a!=b and not trig[a] and not trig[b]:
+                elif a!=b and trig[a] and trig[b]:
                     M[a,b]=M[b,a]=jp*mu0/4/np.pi*(np.log(((Y[a]+Y[b])**2+(X[a]-X[b])**2)/((Y[a]-Y[b])**2+(X[a]-X[b])**2))\
-                        +4*simps(Cars_ij(sh_int,Y[a],Y[b],X[a],X[b],mp),sh_int))*l*10**3
+                        +4*simps(Cars_ij(sh_int,Y[a],Y[b],X[a],X[b],mp),sh_int))*l*10**3  
+                elif a!=b and (trig[a] or trig[b]):
+                    M[a,b]=M[b,a]=0
 
 
         carson_cashe[dd] = M
         return M
+        
 
 def combinations(lst,k):
     l = len(lst)
@@ -383,6 +380,7 @@ def submatrix_putter(slices,SM, M):
     for [sl1, sl2] in combinations(slices,2):
         M[sl1[2]:sl1[3]+1,sl2[2]:sl2[3]+1] = SM[sl1[0]:sl1[1]+1,sl2[0]:sl2[1]+1]
         M[sl2[2]:sl2[3]+1,sl1[2]:sl1[3]+1] = SM[sl2[0]:sl2[1]+1,sl1[0]:sl1[1]+1]
+        
 
 
 def grounded_params(vl_name,branch,p,vl_info):
@@ -396,11 +394,12 @@ def Y_matrix_builder(lst_zy,s_i_end):
 
     for item in lst_zy:
         if item["type"]=='bypass' or item["type"]=="to_ground":
-            for (p1,p2) in item["points"]:
-                Y[p1,p1] += 1/R_bypass
-                Y[p2,p2] += 1/R_bypass
-                Y[p1,p2] -= 1/R_bypass
-                Y[p2,p1] -= 1/R_bypass
+            Y_now = item.get("Ybp", [1/R_bypass]*len(item["points"]))
+            for (p1,p2),Y_cur in zip(item["points"],Y_now):
+                Y[p1,p1] += Y_cur
+                Y[p2,p2] += Y_cur
+                Y[p1,p2] -= Y_cur
+                Y[p2,p1] -= Y_cur
 
             if "ground" in item:
                Y[item["ground"],item["ground"]]+= item["Yzy"]
@@ -500,9 +499,12 @@ def length_to_ps_builder(vl_info):
 
     return result   
 
-def Isc_func(x,a,b,c):
+def Isc_func2(x,a,b,c):
     return c+b/(x+a) 
-    #return a * np.exp(-b * x) + c
+
+def Isc_func(x,a,b,c,d,e,f):
+    return a+b*x+c*x**2+d*x**3+e*x**4+f*x**5
+    
 
 def Isc_get_maker(rpa_info):  
     result = {} 
@@ -544,7 +546,7 @@ def J_matrix_builder(point_sc,J_make_lst,length_to_ps_lst,rpa_info,Isc_funcs,s_i
         ind = inf["rpa_I_setting"].index(Iy[1]) if Iy[0]!=float("inf") else None
 
         if ind is None:
-            raise Exception("Current of relay settings more than I short {vl_name} {ps}")
+            raise Exception(f"Current of relay settings more than I short {vl_name} {ps}")
 
         I_t = [(Isc[ps],const_t+inf["rpa_time_setting"][ind])]
 
@@ -581,15 +583,33 @@ def J_matrix_builder(point_sc,J_make_lst,length_to_ps_lst,rpa_info,Isc_funcs,s_i
         if sum(I.values())!=0:
             Time_line.append((t-t_old,I))
 
-        
-    print(T_m)  
+    JE = sparse.lil_matrix((s_i_end+s_j_end, len(Time_line)*3),dtype=np.complex128)
+    
+    t_lst = []
+    short = []
+    colum = 0
+    for dt, Isc in Time_line:
+        for i in range(3):
+            for ps, I in Isc.items():
+                JE[J_make_lst[(vl_name,ps)]['sl1'][0]+i,colum] = I * J_make_lst[(vl_name,ps)]['direction'] *10**3
+                JE[J_make_lst[(vl_name,ps)]['sl2'][0]+i,colum] = -1* I * J_make_lst[(vl_name,ps)]['direction'] *10**3
+            t_lst.append(dt)
+            short.append(i)
+            colum += 1
+
+    return JE, t_lst, short
+
+def simple_callback(status,data):
+    if status=="Calc equation system":
+        print("Составляем систему уравнений")
+    elif status=="Calc points":
+        current,length,name,branch,support = data
+        print(f"Calc point vl: {name}, branch: {branch}, support: {support}, {current} from {length}")
 
 
-    print(Time_line)
 
-
-def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30):   
-
+def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30, callback=simple_callback):   
+    callback("Calc equation system",None)
     i, j = 0, 0
 
     okgt_lst = []
@@ -607,11 +627,15 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30):
     okgt_nodes = {}
     vls_nodes = {}
     ps_vls = {}
+
+    okgt_max = {}
+    okgt_branch = []
     
 
     lst_zy = []
 
     for (n, k), sectors in okgt_info.items():
+        okgt_branch.append((n, k))
         if n not in okgt_nodes:
             okgt_nodes[n] = (i,j)
 
@@ -671,6 +695,13 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30):
                 d_row = {"start": start, "end": end, "length":sector["length"], "type":sector["type"]}
                 okgt_lst.append(d_row)
 
+                okgt_max[start[1]] = {
+                    "conductor": None,
+                    "type": sector["type"],
+                    "links": [(sector["name"])],
+                    "length":sector["length"],
+                }
+
             elif sector["type"] == "single_conductive":
                 if sector["way_grounded"] == "not":
                     v = 1 
@@ -723,6 +754,13 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30):
 
                     if grounded[v] is not None and m==v-1:      
                         lst_zy.append({"type":"to_ground","Yzy":type_zy_chose(sector,grounded[v],Y_cc),"points":[],"ground":end[0]})
+
+                    okgt_max[start[1]] = {
+                        "conductor": sector["groundwire"],
+                        "type": sector["type"],
+                        "links": [(sector["name"],m,m+1)],
+                        "length":dl,
+                    }
 
         if k not in okgt_nodes:
             okgt_nodes[k] = (i,j)
@@ -792,7 +830,7 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30):
                                 trig_first = True
                                 i_old = nodes_position[key[0]][0]
                                 s1,s2,s3,s4,s5 = (i_old,j,-1),(i_old+1,j+1,-1),(i_old+2,j+2,-1),(i_old+3,j+3,-1),(i_old+4,j+4,-1)
-                                i+=5
+                                #i+=5
                                 e1,e2,e3,e4,e5= (i,j,1),(i+1,j+1,1),(i+2,j+2,1),(i+3,j+3,1),(i+4,j+4,1)
                             else:
                                 trig_first = True
@@ -864,8 +902,7 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30):
 
     s_i_сс, s_j_сс = i,j
 
-
-    
+        
     for item in cc_lst:
         if item["is_vl"]:
             vls_to_cc[(item["vl_name"],item["branch"],item["N"],item["K"])] = len(cc_lst_nw)
@@ -879,6 +916,7 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30):
             "X_countercable": item["sector"]["X_countercable"],
             "D_countercable": item["sector"]["D_countercable"],
             "ground_resistance": item["sector"]["ground_resistance"],
+            "connect_to_ps":  item["sector"].get("connect_to_ps",False),
             }
         cc_lst_nw.append(d)
         
@@ -886,8 +924,7 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30):
 
     s_i_end, s_j_end = i,j
 
-    #print(vls_to_cc) 
-
+    
 
     A = sparse.lil_matrix((s_i_end, s_j_end),dtype=np.float64)
     
@@ -903,6 +940,7 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30):
         A[item["start"][:2]] = item["start"][2]
         A[item["end"][:2]] = item["end"][2]
 
+    
 
     J_make_lst = {}
     vl_to_ps = {}
@@ -921,7 +959,7 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30):
 
 
     Z = sparse.lil_matrix((s_j_end, s_j_end),dtype=np.complex128)
-    #print(s_j_end, s_j_end)
+    
 
     calculated_vl = set()
     trig_maker = lambda lst,t=True: [(not val["conductor"][1] and val["conductor"][0] is not None) and t if i==3 or i==4 else True for i,val in enumerate(lst)]
@@ -938,9 +976,7 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30):
     okgt_sc = set()
     okgt_sc_lst = []
 
-    okgt_max = {}
-
-
+    
     for i in range(0,len(vl_lst),5):
         key = tuple(vl_lst[i][j] for j in ["name_vl","link_branch","supportN","supportK"])
         if (key,vl_lst[i]['is_Ps_sector']) not in calculated_vl and not vl_lst[i]['is_Ps_sector']:
@@ -954,7 +990,7 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30):
             d = [*vl_lst[i:i+5]]
             calculated_vl.add((key,vl_lst[i]['is_Ps_sector']))
             slices = [(0,4,vl_lst[i]["start"][1],vl_lst[i+4]["start"][1])]
-            sl=0
+            sl=5
 
             pos = (3 if vl_lst[i+3]["conductor"][1] else 4) if vl_lst[i]["type"]=="with_okgt" else None
 
@@ -965,18 +1001,17 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30):
                 trig+=trig_maker(pt,t=False)
                 k+=key_maker(pt)
                 d+=[*pt]
-                sl+=5
                 slices.append((sl,sl+4,pt[0]["start"][1],pt[4]["start"][1]))
+                sl+=5
                 calculated_vl.add((j,vl_lst[i]['is_Ps_sector']))
 
             dl = vl_lst[i]["length"]
 
             if isOkgt is not None:
-                sl += 1
                 k.append("okgt_vl")
                 trig.append(True)
                 slices.append((sl,sl,okgt_lst[isOkgt]["start"][1],okgt_lst[isOkgt]["start"][1]))
-                
+                sl += 1
                 for j in range(5,len(d),5):
                     pos_n = 3 if d[j+3]["conductor"][1] else 4
                     if pos != pos_n:
@@ -985,14 +1020,16 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30):
 
                 okgt_max[okgt_lst[isOkgt]["start"][1]] = {
                     "conductor": d[pos]["conductor"][0],
-                    "links": [(d[j]["name_vl"],d[j]["link_branch"],d[j]["supportN"],d[j]["supportK"]) for j in range(0,len(d),5)]
+                    "type": "VL",
+                    "links": [(d[j]["name_vl"],d[j]["link_branch"],d[j]["supportN"],d[j]["supportK"]) for j in range(0,len(d),5)],
+                    "length":dl,
                 }
 
                 d.append(vl_lst[i+pos])
 
                 
             if isCC is not None:
-                sl+=1
+                #sl+=1
                 k.append("cc")
                 trig.append(True)  
                 slices.append((sl,sl,cc_lst_nw[isCC]["start"][1],cc_lst_nw[isCC]["start"][1]))
@@ -1016,7 +1053,7 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30):
                         i_vl = previous_sector["link"][current_sector["okgt"][0]]["end"][0]
 
                         lst_zy.append({'type': 'bypass', 'points': [(i_okgt, i_vl)]})
-                        #print("start",previous_sector["name_vl"],previous_sector["link_branch"],previous_sector["supportN"],previous_sector["supportK"])
+                        
 
                 elif previous_sector["type"]=="with_okgt" and current_sector["type"]=="without_okgt":
                     if (previous_sector["link_branch"]==current_sector["link_branch"] and\
@@ -1027,8 +1064,7 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30):
                         i_vl = current_sector["link"][previous_sector["okgt"][0]]["start"][0]
 
                         lst_zy.append({'type': 'bypass', 'points': [(i_okgt, i_vl)]})
-                        #print("end",previous_sector["name_vl"],previous_sector["link_branch"],previous_sector["supportN"],previous_sector["supportK"])
-
+                        
 
                 # connection groundwire to other groundwire when vl become multichain or singlechain
 
@@ -1167,6 +1203,7 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30):
         elif (key,vl_lst[i]['is_Ps_sector']) not in calculated_vl and vl_lst[i]['is_Ps_sector']:
             isOtherVls_ps = [j for j in vl_to_vls.get(key,[]) if j in ps_vls]
             isOkgt = vls_to_okgt.get(key)
+            isCC = vls_to_cc.get(key)
             
             shift = 0
             trig = trig_maker_ps(vl_lst[i:i+5])
@@ -1174,7 +1211,7 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30):
             d = [*vl_lst[i:i+5]]
             calculated_vl.add((key,vl_lst[i]['is_Ps_sector']))
             slices = [(0,4,vl_lst[i]["start"][1],vl_lst[i+4]["start"][1])]
-            sl=0
+            sl=5
 
             i_p1 = vl_lst[i]["start" if ps_vls[key][2]=="left" else "end"][0]
             points_zy = [[i_p1,vl_lst[i+1+j]["start" if ps_vls[key][2]=="left" else "end"][0]] for j in range(4)]
@@ -1186,12 +1223,13 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30):
                 trig+=trig_maker_ps(pt,t=False)
                 k+=key_maker_ps(pt)
                 d+=[*pt]
-                sl+=5
                 slices.append((sl,sl+4,pt[0]["start"][1],pt[4]["start"][1]))
+                sl+=5
                 calculated_vl.add((j,vl_lst[i]['is_Ps_sector']))
 
                 points_zy += [[i_p1,j["start" if ps_vls[key][2]=="left" else "end"][0]] for j in pt]
 
+            
             dl = vl_lst[i]["length"]
 
             if isOkgt is not None:
@@ -1202,6 +1240,15 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30):
                 node2 = okgt_lst[isOkgt][sides[1]][0]
 
                 lst_zy.append({"type":"bypass","points":[(node1,node2)]})
+
+            if isCC is not None:
+                if cc_lst_nw[isCC]["connect_to_ps"]:
+                    R = dl * (4*ro_fe)/(np.pi*cc_lst_nw[isCC]["D_countercable"]**2)*10**3
+                    if ps_vls[key][2]=="left":
+                        lst_zy.append({"type":"bypass","points":[(i_p1,cc_lst_nw[isCC]["start"][0])], "Ybp":[1/R]})
+                    else:
+                        lst_zy.append({"type":"bypass","points":[(i_p1,cc_lst_nw[isCC]["end"][0])], "Ybp":[1/R]})
+                
 
             
             lst_zy.append({'type': 'to_ground', 'points': points_zy,"ground":i_p1,"Yzy":1/ps_info[ps_vls[key][1]]["resistance"]})
@@ -1225,7 +1272,6 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30):
             
         submatrix_putter(slices,Carson([X,Y,R,r,trig,pz,dl]), Z)
 
-    print("okgt start calc")
             
     for i, item in enumerate(okgt_lst):
         if item["type"]=='single_conductive':
@@ -1273,39 +1319,112 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30):
     Isc_funcs = Isc_get_maker(rpa_info)
     length_to_ps_lst = length_to_ps_builder(vl_info)
 
+
+    # Do matrix operation for create equation system
+    dZ = sparse.diags(Z.diagonal(), format='lil')
+    W = Z - dZ
+    dZ = dZ.tocsc()
+    dY=linalg.inv(dZ)
+
+    A = A.tocsc()
+    At = A.transpose()
+    Yy=(A.dot(dY)).dot(At)
+
+    Yy = Yy.tolil()
+    Yy+=Yadd
+
+    KI=A.dot(((W.tocsc()).dot(dY)).transpose())
+
+    YZ=sparse.vstack([sparse.hstack([Yy, KI]), sparse.hstack([At, Z])],format='lil')
+
+    B = np.zeros((s_j_vl,),dtype=np.float64)
+
+
+    for current ,itm in enumerate(okgt_sc_lst):
+        
+        """ if current != 99:
+            continue """
+
+        JE, t_lst, phase_lst = J_matrix_builder(itm,J_make_lst,length_to_ps_lst,rpa_info,Isc_funcs,s_i_end,s_j_end)
+        p1 = itm['i_okgt']
+        
+        callback("Calc points",(current,len(okgt_sc_lst),itm['vl_name'],itm['branch'],itm['support']))
+
+        for i, (t, ph) in enumerate(zip(t_lst, phase_lst)):
+            p2 = itm['i_vl'][ph]
+
+            YZ[p1,p1] += 1/R_bypass
+            YZ[p2,p2] += 1/R_bypass
+            YZ[p1,p2] -= 1/R_bypass
+            YZ[p2,p1] -= 1/R_bypass
+
+            H = linalg.spsolve(YZ.tocsr(),JE[:,i])
+            okgt_I = np.abs(H[s_i_end:s_i_end+s_j_vl])
+            B_now = okgt_I**2*t
+
+            #B_now = okgt_I  #**2*t
+            #print(JE[:,i],t, ph)
+            #print(okgt_I)
+
+            B = np.maximum(B, B_now)
+
+            YZ[p1,p1] -= 1/R_bypass
+            YZ[p2,p2] -= 1/R_bypass
+            YZ[p1,p2] += 1/R_bypass
+            YZ[p2,p1] += 1/R_bypass
     
-    J_matrix_builder(okgt_sc_lst[0],J_make_lst,length_to_ps_lst,rpa_info,Isc_funcs,s_i_end,s_j_end)
+        
+    """ for i in range(np.shape(B)[0]):
+        print(round(B[i]/10**6,3))
+
+    print("length",i+1) """
+
+
+    result = {}
+    for i, (n,k) in enumerate(okgt_branch):
+        dl = 0
+        result[(n,k)] = {"B":[],"Bmax":[],"L":[],"type":[],"conductor":[],"links":[]}
+        j_s = okgt_nodes[n][1]
+        j_e = okgt_nodes[k][1]
+
+        if i==0:
+            b = j_s
+        else:
+            pass 
+
+        for j in range(b,j_e):
+            Bmax = k_conductors.get(okgt_max[j]['conductor'],{}).get("Bsc",None)
+            #result[(n,k)]["B"]+= [B[j],B[j]]   #[B[j]/10**6,B[j]/10**6] 
+            result[(n,k)]["B"]+= [B[j]/10**6,B[j]/10**6] 
+            result[(n,k)]["Bmax"]+=[Bmax,Bmax]
+
+            result[(n,k)]["conductor"]+=[okgt_max[j]['conductor'],okgt_max[j]['conductor']]
+            result[(n,k)]["type"]+=[okgt_max[j]["type"],okgt_max[j]["type"]]
+            result[(n,k)]["links"]+=[okgt_max[j]["links"],okgt_max[j]["links"]]
+            
+            result[(n,k)]["L"].append(dl)
+            dl+=okgt_max[j]['length']
+            result[(n,k)]["L"].append(dl)
+
+            b = j_e
+
+
+    return result
+
+
+if __name__=='__main__':
+    from initial_data2 import okgt_info, vl_info, ps_info, rpa_info
+    import matplotlib.pyplot as plt
     
-
-    #ps_vls[(vl_name,key,nc,kc)] = (len(vl_lst),branch["PS_name_2"],"right")
-    """ for i in range(s_j_end):
-        if Z[i,i] == 0:
-            print(i)  """
-
-    
-
-    """ print("="*10)        
-
-    for i, j in J_make_lst.items():
-        print(i,j)
+    result = main_calc(okgt_info, vl_info, ps_info, rpa_info)
 
 
-    print(vl_to_ps)
+    for val in result.values():
+        fig = plt.figure() 
+        ax = fig.add_subplot(111)
+        ax.plot(val["L"],val["B"],'r')
+        ax.plot(val["L"],val["Bmax"],'b')
 
-    print("="*10)
-    for i in okgt_sc_lst:
-        print(i) """
+    plt.show()
 
-    """ print("="*10)
-    for i,j in okgt_max.items():
-        print(i,j) """
-
-   
-
-
-main_calc(okgt_info, vl_info, ps_info, rpa_info)
-""" result = length_to_ps_builder(vl_info)
-
-for key, val in result["VL #4"]["PS_10"].items():
-    print(key, val) """
 
