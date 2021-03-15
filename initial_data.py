@@ -3,7 +3,7 @@
 """ 
 description of property parameters:
 
-"way_grounded" : "left", "right", "not", "both"
+"way_grounded" : "left", "right", "not", "both" "inside"
 "type": "VL", "single", "single_dielectric"
 "PS": "left", "right", "not", "both","inside"
 "link_okgt" - generate automaticlu, without people

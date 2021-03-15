@@ -1338,6 +1338,7 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30, callback=simple_call
     YZ=sparse.vstack([sparse.hstack([Yy, KI]), sparse.hstack([At, Z])],format='lil')
 
     B = np.zeros((s_j_vl,),dtype=np.float64)
+    B_f = [np.zeros((s_j_vl,),dtype=np.float64),np.zeros((s_j_vl,),dtype=np.float64),np.zeros((s_j_vl,),dtype=np.float64)]
 
 
     for current ,itm in enumerate(okgt_sc_lst):
@@ -1349,9 +1350,10 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30, callback=simple_call
         p1 = itm['i_okgt']
         
         callback("Calc points",(current,len(okgt_sc_lst),itm['vl_name'],itm['branch'],itm['support']))
-
+        
         for i, (t, ph) in enumerate(zip(t_lst, phase_lst)):
             p2 = itm['i_vl'][ph]
+            #print(ph)
 
             YZ[p1,p1] += 1/R_bypass
             YZ[p2,p2] += 1/R_bypass
@@ -1360,20 +1362,26 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30, callback=simple_call
 
             H = linalg.spsolve(YZ.tocsr(),JE[:,i])
             okgt_I = np.abs(H[s_i_end:s_i_end+s_j_vl])
-            B_now = okgt_I**2*t
+            #B_now = okgt_I**2*t
+            B_f[ph] += okgt_I**2*t
+            #print(np.shape(B_now))
+            #print(s_i_end+s_j_vl-s_i_end)
 
             #B_now = okgt_I  #**2*t
             #print(JE[:,i],t, ph)
             #print(okgt_I)
-
-            B = np.maximum(B, B_now)
+            #B = np.maximum(B,B_now)
 
             YZ[p1,p1] -= 1/R_bypass
             YZ[p2,p2] -= 1/R_bypass
             YZ[p1,p2] += 1/R_bypass
             YZ[p2,p1] += 1/R_bypass
-    
-        
+
+        B = np.maximum(B, np.maximum(B_f[0], np.maximum(B_f[1], B_f[2])))
+        B_f[0].fill(0)
+        B_f[1].fill(0)
+        B_f[2].fill(0)
+
     """ for i in range(np.shape(B)[0]):
         print(round(B[i]/10**6,3))
 
