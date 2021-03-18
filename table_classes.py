@@ -1,6 +1,7 @@
 # pylint: disable=E0611
 # pylint: disable=E1101
-from PyQt5.QtWidgets import  QTableWidgetItem, QTableWidget, QItemDelegate, QComboBox, QLineEdit
+from PyQt5.QtWidgets import QTableWidgetItem, QTableWidget, QItemDelegate, QComboBox, QLineEdit,\
+    QCheckBox, QWidget, QHBoxLayout, QButtonGroup, QSizePolicy
 from PyQt5.QtGui import  QValidator,  QColor
 from PyQt5.QtCore import Qt
 
@@ -22,6 +23,28 @@ def traceback_erors(func):
         return return_value
 
     return wrapper
+
+
+class CustomTableWidgetItem(QTableWidgetItem):
+    def text(self):
+        return QTableWidgetItem.text(self).strip()
+
+class CustomButtonGroup(QButtonGroup):
+    def __init__(self,parent=None):
+        super().__init__(parent)
+        self.buttonPressed.connect(self.startEmpty)
+        self.buttonReleased.connect(self.endEmpty)
+        self.ex = False
+    def startEmpty(self, obj):
+        st = obj.checkState()
+        if st == Qt.Checked:
+            self.setExclusive(False)
+            self.ex = True 
+    def endEmpty(self, obj):
+        if self.ex:
+            self.setExclusive(True)
+            self.ex = False
+    
 
 
 class MyValidator(QValidator):
@@ -120,7 +143,7 @@ class DownloadDelegate(QItemDelegate):
             if index.column() in (3,5,9,10,11):
                 lineedit.setValidator(MyValidator("duble",lineedit,minus=False))
                 return lineedit
-            if index.column() in (2,8):
+            elif index.column() in (2,8):
                 lineedit.setValidator(MyValidator("duble",lineedit,minus=True))
                 return lineedit
             elif index.column() == 4:
@@ -136,12 +159,49 @@ class DownloadDelegate(QItemDelegate):
             else: 
                 return QItemDelegate.createEditor(self, parent, option, index)
 
+        elif self.tp=="vl_sector": 
+            if index.column() in (2,3):
+                lineedit.setValidator(MyValidator("duble",lineedit,minus=False))
+                return lineedit
+            elif index.column() in (4,5):
+                lineedit.setValidator(MyValidator("int",lineedit,minus=False))
+                return lineedit
+            else: 
+                return QItemDelegate.createEditor(self, parent, option, index)
+
+        elif self.tp in ("vl_conductors","vl_phases","vl_supports","vl_groundwires"): 
+            if index.column() in (1,2):
+                lineedit.setValidator(MyValidator("int",lineedit,minus=False))
+                return lineedit
+            else: 
+                return QItemDelegate.createEditor(self, parent, option, index)
+
+        elif self.tp=="vl_grounded": 
+            if index.column() in (1,2):
+                lineedit.setValidator(MyValidator("int",lineedit,minus=False))
+                return lineedit
+            elif index.column() in (4,):
+                lineedit.setValidator(MyValidator("duble",lineedit,minus=False))
+                return lineedit
+            else: 
+                return QItemDelegate.createEditor(self, parent, option, index)
+
+        elif self.tp=="vl_countercables": 
+            if index.column() in (1,2):
+                lineedit.setValidator(MyValidator("int",lineedit,minus=False))
+                return lineedit
+            elif index.column() in (3,):
+                lineedit.setValidator(MyValidator("duble",lineedit,minus=True))
+                return lineedit
+            elif index.column() in (4,5,6):
+                lineedit.setValidator(MyValidator("duble",lineedit,minus=False))
+                return lineedit
+            else: 
+                return QItemDelegate.createEditor(self, parent, option, index)
 
         else:
             return QItemDelegate.createEditor(self, parent, option, index)
 
-            #
-        
 
 
 class TableTempalte(QTableWidget):
@@ -367,7 +427,7 @@ class TableTempalte(QTableWidget):
         now = self.currentItem().text()
         
         self.checkUnique(i,j,self.previousItem,now)
-        self.previousItem = now
+        #self.previousItem = now
         now = self.currentItem().text()
         
         self.edit_sp(i,j,self.previousItem,now)
@@ -403,15 +463,23 @@ class TableTempalte(QTableWidget):
         
     @traceback_erors
     def setLinkParentToChildren(self,linkList):
-        self.childrenList = {i:set() for i in linkList}
-        self.spColums = {i:set() for i in linkList}
-        self.spCombo = {i:set() if len(i)==2 else None for i in linkList}
+        for i in linkList:
+            if i not in self.childrenList:
+                self.childrenList[i] = set()
+            if i not in self.spColums:
+                self.spColums[i] = set()
+            if i not in self.spCombo and len(i)==2:
+                self.spCombo[i] = set()
+
+        #self.childrenList = {i:set() for i in linkList}
+        #self.spColums = {i:set() for i in linkList}
+        #self.spCombo = {i:set() if len(i)==2 else None for i in linkList}
 
     @traceback_erors
     def add_sp(self, ind):
         for key, st in self.spColums.items():
             if len(key)==1 and len(key[0]) == 1:
-                if self.item(ind,key).text() != "":
+                if self.item(ind,key[0][0]).text() != "":
                     st.add(self.item(ind,key[0][0]).text())
 
                     for child in self.childrenList[key]:
@@ -499,7 +567,6 @@ class TableTempalte(QTableWidget):
 
     @traceback_erors
     def edit_sp(self,i,j,prev,now):
-        
         for key, st in self.spColums.items():
             if len(key)==1 and len(key[0]) == 1:
                 if j == key[0][0]:
@@ -545,7 +612,6 @@ class TableTempalte(QTableWidget):
                     p = prev
                     n = now
                     conformity = [1 if self.cellWidget(i,c).currentText()==m else 0 for c,m in key[1]]
-
                     if sum(conformity)==len(conformity):
                         if p=="" and n!="":
                             st.add(n)
@@ -590,6 +656,7 @@ class TableTempalte(QTableWidget):
     def add_child(self,key,child):
         if key in self.childrenList:
             self.childrenList[key].add(child)
+            child.clear()
             child.addItems(["Нет"]+list(self.spColums[key]))
             child.setCurrentText("Нет")
         
@@ -597,6 +664,8 @@ class TableTempalte(QTableWidget):
     def remove_child(self,key,child):
         if key in self.childrenList:
             self.childrenList[key].discard(child)
+            child.clear()
+            child.addItems(["Нет"])
         
 
     
@@ -632,8 +701,8 @@ class NodeTable(TableTempalte):
         super().add_row()
         
         ind = self.currentRow()+1 if self.currentRow() != -1 else self.rows-1
-        self.setItem(ind,0, QTableWidgetItem(""))
-        self.setItem(ind,1, QTableWidgetItem(""))
+        self.setItem(ind,0, CustomTableWidgetItem(""))
+        self.setItem(ind,1, CustomTableWidgetItem(""))
         self.add_branch(ind)
 
     def remove_row(self):
@@ -641,9 +710,9 @@ class NodeTable(TableTempalte):
         self.remove_branch(ind)
         super().remove_row()
 
-    def write_table(self,okgt_info):
+    def write_table(self,info,vl=False):
         self.clear_table()
-        for i, (n,k) in enumerate(okgt_info.keys()):
+        for i, (n,k) in enumerate((info["branches"] if vl else info).keys()):
             self.add_row()
             self.item(i,0).setText(n)
             self.item(i,1).setText(k)
@@ -698,8 +767,8 @@ class OkgtSectorTable(TableTempalte):
         tp.addItems([i for i in self.type_dct.values()])
         self.setCellWidget(ind,0, cmb)
         self.setCellWidget(ind,1, tp)
-        self.setItem(ind,2, QTableWidgetItem(""))
-        self.setItem(ind,3, QTableWidgetItem(""))
+        self.setItem(ind,2, CustomTableWidgetItem(""))
+        self.setItem(ind,3, CustomTableWidgetItem(""))
         
         self.add_Unique(ind)
 
@@ -760,10 +829,558 @@ class OkgtSectorTable(TableTempalte):
             if dct[key] == []:
                 del dct[key]
         return dct
-                    
-            
-   
 
+
+
+class VlSectorTable(TableTempalte):
+    def __init__(self,NodeObj,SectorObj,timer,parent=None):
+        super().__init__(parent)
+
+        self.setColumnCount(6)
+        self.setHorizontalHeaderLabels(["Ветвь","Участок ОКГТ","Lн, км","Lкм, км","Оп. нач.","Оп. конц."])    
+
+        self.NodeObj = NodeObj
+        self.SectorObj = SectorObj
+        self.timer = timer
+
+        self.separator = " - "
+        self.NodeObj.setLinkParentToChildren([((0,1,self.separator),)])
+        self.SectorObj.setLinkParentToChildren([((2,),((1,"ВЛ"),))])   
+
+        self.setItemDelegate(DownloadDelegate("vl_sector"))   
+
+    def add_row(self):
+        super().add_row()
+        ind = self.currentRow()+1 if self.currentRow() != -1 else self.rows-1
+
+        branch = UserComboBox(self.timer)
+        okgt_sector = UserComboBox(self.timer)
+        
+        self.setCellWidget(ind,0, branch)
+        self.setCellWidget(ind,1, okgt_sector)
+        self.setItem(ind,2, CustomTableWidgetItem(""))
+        self.setItem(ind,3, CustomTableWidgetItem(""))
+        self.setItem(ind,4, CustomTableWidgetItem(""))
+        self.setItem(ind,5, CustomTableWidgetItem(""))
+        
+        self.NodeObj.add_child(((0,1,self.separator),),branch)
+        self.SectorObj.add_child(((2,),((1,"ВЛ"),)),okgt_sector)
+        
+    def remove_row(self):
+        if self.rows>0:
+            ind = self.currentRow() if self.currentRow() != -1 else self.rows-1
+            branch = self.cellWidget(ind,0)
+            okgt_sector = self.cellWidget(ind,1)
+            self.NodeObj.remove_child(((0,1,self.separator),),branch)
+            self.SectorObj.remove_child(((2,),((1,"ВЛ"),)),okgt_sector)
+        super().remove_row()
+
+    def clear_table(self):
+        for _ in range(self.rowCount()):
+            self.remove_row()
+            
+    def read_table(self,lst):
+        rez = []
+        sep_keys = {self.separator.join(key):key for key in lst}
+        for i in range(self.rowCount()):
+            if self.cellWidget(i,0).currentText() in sep_keys:
+                d = {
+                    "type": "without_okgt" if self.cellWidget(i,1).currentText()=="Нет" else "with_okgt",
+                    "link_okgt": self.cellWidget(i,1).currentText(),
+                    "link_branch": sep_keys[self.cellWidget(i,0).currentText()],
+                    "supportN" : None if self.item(i,4).text()=="" else int(self.item(i,4).text()),
+                    "supportK" : None if self.item(i,5).text()=="" else int(self.item(i,5).text()),
+                    "lengthN": None if self.item(i,2).text()=="" else float(self.item(i,2).text()),
+                    "lengthK": None if self.item(i,3).text()=="" else float(self.item(i,3).text()),
+                }
+                if d["type"] == "without_okgt":
+                    ln, lk = self.item(i,2).text(), self.item(i,3).text()
+                    d["length"] = abs(float(lk)-float(ln)) if ln!="" and lk!="" else None
+                
+                rez.append(d)
+        return {"sectors":rez}
+    @traceback_erors
+    def write_table(self, vl_info):
+        self.clear_table()
+        for i in range(self.NodeObj.rowCount()):
+            self.NodeObj.add_sp(i)
+        for i in range(self.SectorObj.rowCount()):
+            self.SectorObj.add_sp(i)
+        
+        for i, sector in enumerate(vl_info["sectors"]):
+            self.add_row()
+            
+            self.cellWidget(i,0).setCurrentText(self.separator.join(sector["link_branch"]))
+            self.cellWidget(i,1).setCurrentText(sector.get("link_okgt","Нет"))
+            
+            self.item(i,4).setText(str("" if sector["supportN"] is None else sector["supportN"]))
+            self.item(i,5).setText(str("" if sector["supportK"] is None else sector["supportK"]))
+
+            if "lengthN" in sector and "lengthK" in sector:
+                self.item(i,2).setText(str("" if sector["lengthN"] is None else sector["lengthN"]))
+                self.item(i,3).setText(str("" if sector["lengthK"] is None else sector["lengthK"]))
+            else:
+                self.item(i,2).setText("0")
+                self.item(i,3).setText(str("" if sector["length"] is None else sector["length"]))
+
+
+class VlPsParamsTable(TableTempalte):
+    @traceback_erors
+    def __init__(self,NodeObj,PSObj,timer,parent=None):
+        super().__init__(parent)     
+
+        self.setColumnCount(4)
+        self.setHorizontalHeaderLabels(["Ветвь","ПС","Сторона","Lкм, км"])   
+
+        self.NodeObj = NodeObj
+        self.PSObj = PSObj
+        
+        self.timer = timer
+
+        self.separator = " - "
+        self.NodeObj.setLinkParentToChildren([((0,1,self.separator),)])
+        self.PSObj.setLinkParentToChildren([((0,),)])
+          
+        self.setItemDelegate(DownloadDelegate("vl_ps"))
+
+    def add_row(self):
+        super().add_row()
+        ind = self.currentRow()+1 if self.currentRow() != -1 else self.rows-1
+
+        branch = UserComboBox(self.timer)
+        self.NodeObj.add_child(((0,1,self.separator),),branch)
+        self.setCellWidget(ind,0, branch)
+
+        ps = UserComboBox(self.timer)
+        self.PSObj.add_child(((0,),),ps)
+        self.setCellWidget(ind,1, ps)
+
+        side = UserComboBox(self.timer)
+        side.addItems(["Слева","Справа"])
+        self.setCellWidget(ind,2, side)
+
+        self.setItem(ind,3, CustomTableWidgetItem(""))
+
+    def remove_row(self):
+        if self.rows>0:
+            ind = self.currentRow() if self.currentRow() != -1 else self.rows-1
+            branch = self.cellWidget(ind,0)
+            ps = self.cellWidget(ind,1)
+            self.NodeObj.remove_child(((0,1,self.separator),),branch)
+            self.PSObj.remove_child(((0,),),ps)
+        super().remove_row()
+
+    def clear_table(self):
+        for _ in range(self.rowCount()):
+            self.remove_row()
+    
+    @traceback_erors
+    def read_table(self,lst):
+        rez = []
+        sep_keys = {self.separator.join(key):key for key in lst}
+        for i in range(self.rowCount()):
+            if self.cellWidget(i,0).currentText() in sep_keys and self.cellWidget(i,1).currentText()!="Нет":
+                d = { 
+                    "link_branch": sep_keys[self.cellWidget(i,0).currentText()],
+                    "PS":self.cellWidget(i,1).currentText(),
+                    "side": "left" if self.cellWidget(i,2).currentText() == "Слева" else "right",
+                    "length": None if self.item(i,3).text()=="" else float(self.item(i,3).text()),
+                } 
+                rez.append(d)
+        branches = {key:{} for key in lst}
+        PSs = [{"PS_name":i["PS"],"length":i["length"]} for i in rez]
+
+        for branch, info in branches.items():
+            current_ps = list(filter(lambda x: x == branch, rez.keys()))
+            if len(current_ps)==2:
+                ps1,ps2 = current_ps[0:2]
+                if (ps1["side"]=="left" and ps2["side"]=="right") or (ps1["side"]=="right" and ps2["side"]=="left"):
+                    info["PS"] = "both"
+                    info["PS_name_1" if ps1["side"]=="left" else "PS_name_2"] = ps1["PS"]
+                    info["PS_name_1" if ps2["side"]=="left" else "PS_name_2"] = ps2["PS"]
+                else:
+                    info["PS"] = "not"
+            elif len(current_ps)==1:
+                ps = current_ps[0]
+                info["PS"] = ps["side"]
+                info["PS_name_1" if ps["side"]=="left" else "PS_name_2"] = ps["PS"]
+            elif len(current_ps)==0:
+                info["PS"] = "not"
+            elif len(current_ps)>2:
+                info["PS"] = "not"
+
+
+        return {"branches":branches,"PSs":PSs}
+    
+    @traceback_erors
+    def write_table(self, vl_info):
+        self.clear_table()
+        for i in range(self.NodeObj.rowCount()):
+            self.NodeObj.add_sp(i)
+        for i in range(self.PSObj.rowCount()):
+            self.PSObj.add_sp(i)
+
+        psLength = {i["PS_name"]:i["length"] for i in vl_info["PSs"]}
+
+        i=0
+        for (n,k), data in vl_info["branches"].items():
+            if data["PS"] in ("both","left"):
+                self.add_row()
+                self.cellWidget(i,0).setCurrentText(self.separator.join((n,k)))
+                self.cellWidget(i,1).setCurrentText(data["PS_name_1"])
+                self.cellWidget(i,2).setCurrentText("Слева")
+                self.item(i,3).setText(str("" if psLength[data["PS_name_1"]] is None else psLength[data["PS_name_1"]]))
+                i+=1
+
+            if data["PS"] in ("both","right"):
+                self.add_row()
+                self.cellWidget(i,0).setCurrentText(self.separator.join((n,k)))
+                self.cellWidget(i,1).setCurrentText(data["PS_name_2"])
+                self.cellWidget(i,2).setCurrentText("Справа")
+                self.item(i,3).setText(str("" if psLength[data["PS_name_2"]] is None else psLength[data["PS_name_2"]]))
+                i+=1
+
+
+class VlCommonChainsTable(TableTempalte):
+    @traceback_erors
+    def __init__(self,NodeObj,VlObj,le_manager,line,timer,parent=None):
+        super().__init__(parent)   
+
+        self.setColumnCount(7)
+        self.setHorizontalHeaderLabels(["Ветвь","Оп. нач.","Оп. конц.","Название ВЛ","Ветвь ВЛ","Оп. нач. ВЛ","Оп. конц. ВЛ"]) 
+
+        self.NodeObj = NodeObj
+        self.VlObj = VlObj
+        self.le_manager = le_manager
+        self.line = line
+        
+        self.timer = timer
+
+        self.separator = " - "
+        self.NodeObj.setLinkParentToChildren([((0,1,self.separator),)])
+        for branches in self.VlObj.values():
+            branches["branches"].setLinkParentToChildren([((0,1,self.separator),)])
+
+        self.setItemDelegate(DownloadDelegate("vl_commonchains"))
+
+        self.prevComboText = {}
+        self.ThisToThat = {}
+        self.ThatToThis = {}
+
+    
+
+    @traceback_erors
+    def add_row(self):
+        super().add_row()
+        ind = self.currentRow()+1 if self.currentRow() != -1 else self.rows-1
+
+        branch = UserComboBox(self.timer)
+        self.NodeObj.add_child(((0,1,self.separator),),branch)
+        self.setCellWidget(ind,0, branch)
+
+        self.setItem(ind,1, CustomTableWidgetItem(""))
+        self.setItem(ind,2, CustomTableWidgetItem(""))
+        
+        vl_name = UserComboBox(self.timer)
+        #vl_name.addItems(["Нет"])
+        self.prevComboText[vl_name] = "Нет"
+        self.le_manager.add_child(vl_name,self.line)
+        self.setCellWidget(ind,3, vl_name)
+        vl_name.currentTextChanged.connect(lambda t, o=vl_name: self.setVlBranchCombo(t,o))
+
+        vl_branch = UserComboBox(self.timer)
+        vl_branch.addItems(["Нет"])
+        self.setCellWidget(ind,4, vl_branch)
+
+        self.setItem(ind,5, CustomTableWidgetItem(""))
+        self.setItem(ind,6, CustomTableWidgetItem(""))
+    
+    @traceback_erors
+    def remove_row(self):
+        if self.rows>0:
+            ind = self.currentRow() if self.currentRow() != -1 else self.rows-1
+            branch = self.cellWidget(ind,0)
+            self.NodeObj.remove_child(((0,1,self.separator),),branch)
+            
+            vl_name = self.cellWidget(ind,3)
+            self.le_manager.remove_child(vl_name)
+            vl_name.currentTextChanged.disconnect()
+
+            for key1 in self.VlObj:
+                if self.VlObj[key1]["line"].text() == vl_name.currentText():
+                    break
+            else:
+                key1 = None
+
+            if key1 is not None:
+                self.VlObj[key1]["branches"].remove_child(((0,1,self.separator),),self.cellWidget(ind,4))
+
+        super().remove_row()
+
+    #@traceback_erors
+    def setVlBranchCombo(self,t,obj):
+        for ind in range(self.rowCount()):
+            if self.cellWidget(ind,3)==obj:
+                break
+        else:
+            ind = -1
+        
+        for key1 in self.VlObj:
+            if self.VlObj[key1]["line"].text() == obj.currentText() != "Нет":
+                break
+        else:
+            key1 = None
+
+        prev_text = self.prevComboText[obj]
+        for key2 in self.VlObj:
+            if self.VlObj[key2]["line"].text() == prev_text:
+                break
+        else:
+            key2 = None
+
+
+        if ind>-1 and key1 is not None:
+            if key2 is not None:
+                self.VlObj[key2]["branches"].remove_child(((0,1,self.separator),),self.cellWidget(ind,4))
+
+            self.VlObj[key1]["branches"].add_child(((0,1,self.separator),),self.cellWidget(ind,4))
+                
+            self.prevComboText[obj] = t
+
+        if ind>-1 and key1 is None:
+            if key2 is not None:
+                self.VlObj[key2]["branches"].remove_child(((0,1,self.separator),),self.cellWidget(ind,4))
+            self.prevComboText[obj] = t
+
+
+class VlParamsTable(TableTempalte):
+    
+    def __init__(self,NodeObj,tp_params,timer,parent=None):
+        super().__init__(parent)
+
+        self._tp_params = tp_params
+        Header = ["Ветвь","Оп. нач.","Оп. конц."]
+
+        if self._tp_params == "conductors":
+            Header+=["Провод"]
+        elif self._tp_params == "phases":
+            Header+=["Фазировка"]
+        elif self._tp_params == "supports":
+            Header+=["Тип опоры"]
+        elif self._tp_params == "groundwires":
+            Header+=["Грозотрос №1","Грозотрос №2"]
+        elif self._tp_params == "grounded":
+            Header+=["Заземлён","Rзу, Ом"]
+        elif self._tp_params == "countercables":
+            Header+=["X, м","Y, м","D, мм","Ро, Ом*м","Подкл. к ПС"]
+        else:
+            raise Exception(f"atribut tp_params can't have valuse: {tp_params}")
+
+        self.setColumnCount(len(Header))
+        self.setHorizontalHeaderLabels(Header)    
+
+        self.NodeObj = NodeObj
+        
+        self.timer = timer
+
+        self.separator = " - "
+        self.NodeObj.setLinkParentToChildren([((0,1,self.separator),)])
+          
+        self.setItemDelegate(DownloadDelegate(f"vl_{self._tp_params}"))
+
+        self.ph = ["ABC","ACB","BCA","BAC","CAB","CBA","-ABC","-ACB","-BCA","-BAC","-CAB","-CBA"]
+        self.gr_zy = {"№1":"first","№2":"second","№1 и №2":"both"}
+        
+        self.wd_d = {}
+
+    @property
+    def tp_params(self):
+        return self._tp_params
+    @traceback_erors
+    def add_row(self):
+        super().add_row()
+        ind = self.currentRow()+1 if self.currentRow() != -1 else self.rows-1
+
+        branch = UserComboBox(self.timer)
+        self.NodeObj.add_child(((0,1,self.separator),),branch)
+        self.setCellWidget(ind,0, branch)
+        self.setItem(ind,1, CustomTableWidgetItem(""))
+        self.setItem(ind,2, CustomTableWidgetItem(""))
+
+        if self._tp_params == "conductors":
+            conductor = UserComboBox(self.timer)
+            conductor.addItems(["Нет"]+[key for key in k_conductors.keys()])
+            self.setCellWidget(ind,3, conductor)
+        elif self._tp_params == "phases":
+            phase = UserComboBox(self.timer)
+            phase.addItems(self.ph)
+            self.setCellWidget(ind,3, phase)
+        elif self._tp_params == "supports":
+            support = UserComboBox(self.timer)
+            support.addItems(["Нет"]+[key for key in k_supports.keys()]) 
+            self.setCellWidget(ind,3, support)
+        elif self._tp_params == "groundwires":
+            gw1 = UserComboBox(self.timer)
+            gw1.addItems(["Нет"]+[key for key in k_conductors.keys()])
+            gw2 = UserComboBox(self.timer)
+            gw2.addItems(["Нет"]+[key for key in k_conductors.keys()])
+            chb1 = QCheckBox('')
+            chb2 = QCheckBox('')
+
+            button_group = CustomButtonGroup()
+            button_group.addButton(chb1)
+            button_group.addButton(chb2)
+
+            w1 = QWidget()
+            layout1 = QHBoxLayout()
+            layout1.addWidget(chb1)
+            layout1.addWidget(gw1)
+            gw1.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            layout1.setContentsMargins(0, 0, 0, 0)
+            w1.setLayout(layout1)
+            
+            w2 = QWidget()
+            layout2 = QHBoxLayout()
+            layout2.addWidget(chb2)
+            layout2.addWidget(gw2)
+            gw2.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            layout2.setContentsMargins(0, 0, 0, 0)
+            w2.setLayout(layout2)
+
+            self.wd_d[w1] = (gw1,chb1,button_group)
+            self.wd_d[w2] = (gw2,chb2,button_group)
+            self.setCellWidget(ind,3, w1)
+            self.setCellWidget(ind,4, w2)
+
+            #self.cellWidget(ind,3).setSpacing(0)
+
+        elif self._tp_params == "grounded":
+            tp_zy = UserComboBox(self.timer)
+            tp_zy.addItems([i for i in self.gr_zy])
+            self.setCellWidget(ind,3, tp_zy)
+            self.setItem(ind,4, CustomTableWidgetItem("30.0"))
+        elif self._tp_params == "countercables":
+            self.setItem(ind,3, CustomTableWidgetItem(""))
+            self.setItem(ind,4, CustomTableWidgetItem(""))
+            self.setItem(ind,5, CustomTableWidgetItem(""))
+            self.setItem(ind,6, CustomTableWidgetItem(""))
+            
+            to_ps = CustomTableWidgetItem()
+            to_ps.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
+            to_ps.setCheckState(Qt.Unchecked) 
+            self.setItem(ind,7, to_ps)
+
+    def remove_row(self):
+        if self.rows>0:
+            ind = self.currentRow() if self.currentRow() != -1 else self.rows-1
+            branch = self.cellWidget(ind,0)
+            self.NodeObj.remove_child(((0,1,self.separator),),branch)
+
+            if self._tp_params == "groundwires":
+                del self.wd_d[self.cellWidget(ind,3)]
+                del self.wd_d[self.cellWidget(ind,4)]
+            
+        super().remove_row()
+
+    def clear_table(self):
+        for _ in range(self.rowCount()):
+            self.remove_row()
+
+
+    def read_table(self,lst):
+        rez = []
+        gw_p = {(2,0):"groundwire1",(0,2):"groundwire2",(0,0):None}
+
+        sep_keys = {self.separator.join(key):key for key in lst}
+        for i in range(self.rowCount()):
+            if self.cellWidget(i,0).currentText() in sep_keys:
+                d_main = {
+                    "link_branch": sep_keys[self.cellWidget(i,0).currentText()],
+                    "supportN" : None if self.item(i,1).text()=="" else int(self.item(i,1).text()),
+                    "supportK" : None if self.item(i,2).text()=="" else int(self.item(i,2).text()),
+                }
+                
+                if self._tp_params == "conductors":
+                    d_add = {"conductor":self.cellWidget(i,3).currentText()}
+                elif self._tp_params == "phases":
+                    d_add = {"phase":self.cellWidget(i,3).currentText()}
+                elif self._tp_params == "supports":
+                    d_add = {"support":self.cellWidget(i,3).currentText()}
+                elif self._tp_params == "groundwires":
+                    (gw1,chb1,_) = self.wd_d[self.cellWidget(i,3)]
+                    (gw2,chb2,_) = self.wd_d[self.cellWidget(i,4)]
+                    d_add = {
+                        "is_okgt":gw_p[(chb1.checkState(),chb2.checkState())],
+                        "type": "two",
+                        "groundwire1": gw1.currentText() if gw1.currentText()!="Нет" else None,
+                        "groundwire2": gw2.currentText() if gw2.currentText()!="Нет" else None,
+                    }
+                elif self._tp_params == "grounded":
+                    d_add = {
+                        "type":self.gr_zy[self.cellWidget(i,3).currentText()],
+                        "resistance": None if self.item(i,4).text()=="" else float(self.item(i,4).text()),
+                    }
+                elif self._tp_params == "countercables":
+                    d_add = {
+                        "X_countercable": None if self.item(i,3).text()=="" else float(self.item(i,3).text()),
+                        "H_countercable": None if self.item(i,4).text()=="" else float(self.item(i,4).text()),
+                        "D_countercable": None if self.item(i,5).text()=="" else float(self.item(i,5).text()),
+                        "ground_resistance": None if self.item(i,6).text()=="" else float(self.item(i,6).text()),
+                        "connect_to_ps": True if self.item(i,7).checkState() == Qt.Checked else False,
+                    }
+
+                d_main.update([(k,v) for k,v in d_add.items()])
+                
+                rez.append(d_main)
+        return {self._tp_params:rez}
+
+    @traceback_erors
+    def write_table(self, vl_info):
+        self.clear_table()
+        for i in range(self.NodeObj.rowCount()):
+            self.NodeObj.add_sp(i)
+        #for i in range(self.SectorObj.rowCount()):
+            #self.SectorObj.add_sp(i)
+        
+        gr_zy = {v:k for k,v in self.gr_zy.items()}
+
+        for i, sector in enumerate(vl_info[self._tp_params]):
+            self.add_row()
+            
+            self.cellWidget(i,0).setCurrentText(self.separator.join(sector["link_branch"]))
+            self.item(i,1).setText(str("" if sector["supportN"] is None else sector["supportN"]))
+            self.item(i,2).setText(str("" if sector["supportK"] is None else sector["supportK"]))
+
+            if self._tp_params == "conductors": # (,"phases","supports"):
+                self.cellWidget(i,3).setCurrentText(sector["conductor"])
+            elif self._tp_params == "phases":
+                self.cellWidget(i,3).setCurrentText(sector["phase"])
+            elif self._tp_params == "supports":
+                self.cellWidget(i,3).setCurrentText(sector["support"])
+            elif self._tp_params == "groundwires":
+                (gw1,chb1,_) = self.wd_d[self.cellWidget(i,3)]
+                (gw2,chb2,_) = self.wd_d[self.cellWidget(i,4)]
+
+                gw1.setCurrentText(sector.get("groundwire1") if sector.get("groundwire1") is not None else "Нет")
+                gw2.setCurrentText(sector.get("groundwire2") if sector.get("groundwire2") is not None else "Нет")
+
+                if sector["is_okgt"] == "groundwire1":
+                    chb1.setChecked(True)
+                elif sector["is_okgt"] == "groundwire2":
+                    chb2.setChecked(True)
+     
+            elif self._tp_params == "grounded":
+                self.cellWidget(i,3).setCurrentText(gr_zy[sector["type"]])
+                self.item(i,4).setText(str("" if sector["resistance"] is None else sector["resistance"]))
+            elif self._tp_params == "countercables":
+                self.item(i,3).setText(str("" if sector["X_countercable"] is None else sector["X_countercable"]))
+                self.item(i,4).setText(str("" if sector["H_countercable"] is None else sector["H_countercable"]))
+                self.item(i,5).setText(str("" if sector["D_countercable"] is None else sector["D_countercable"]))
+                self.item(i,6).setText(str("" if sector["ground_resistance"] is None else sector["ground_resistance"]))
+                self.item(i,7).setCheckState(Qt.Checked if sector["connect_to_ps"] else Qt.Unchecked)
+                
+       
+        
 
 class OkgtSingleTable(TableTempalte):
     def __init__(self,dataSetObj,timer,parent=None):
@@ -808,24 +1425,24 @@ class OkgtSingleTable(TableTempalte):
         self.setCellWidget(ind,1, groundwire)
 
 
-        self.setItem(ind,2, QTableWidgetItem(""))
-        self.setItem(ind,3, QTableWidgetItem(""))
-        self.setItem(ind,4, QTableWidgetItem(""))
-        self.setItem(ind,5, QTableWidgetItem(""))
+        self.setItem(ind,2, CustomTableWidgetItem(""))
+        self.setItem(ind,3, CustomTableWidgetItem(""))
+        self.setItem(ind,4, CustomTableWidgetItem(""))
+        self.setItem(ind,5, CustomTableWidgetItem(""))
 
         zytype = UserComboBox(self.timer)
         zytype.addItems(list(self.tp_zy.values()))
         self.setCellWidget(ind,6, zytype)
 
-        contorcable = QTableWidgetItem()
+        contorcable = CustomTableWidgetItem()
         contorcable.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
         contorcable.setCheckState(Qt.Unchecked) 
         self.setItem(ind,7, contorcable)
 
-        self.setItem(ind,8, QTableWidgetItem(""))
-        self.setItem(ind,9, QTableWidgetItem(""))
-        self.setItem(ind,10, QTableWidgetItem(""))
-        self.setItem(ind,11, QTableWidgetItem(""))
+        self.setItem(ind,8, CustomTableWidgetItem(""))
+        self.setItem(ind,9, CustomTableWidgetItem(""))
+        self.setItem(ind,10, CustomTableWidgetItem(""))
+        self.setItem(ind,11, CustomTableWidgetItem(""))
 
         
 
@@ -906,8 +1523,8 @@ class PSTable(TableTempalte):
     def add_row(self):
         super().add_row()
         ind = self.currentRow()+1 if self.currentRow() != -1 else self.rows-1
-        self.setItem(ind,0, QTableWidgetItem(""))
-        self.setItem(ind,1, QTableWidgetItem(""))
+        self.setItem(ind,0, CustomTableWidgetItem(""))
+        self.setItem(ind,1, CustomTableWidgetItem(""))
         self.add_Unique(ind)
 
     
@@ -932,3 +1549,102 @@ class PSTable(TableTempalte):
     def clear_table(self):
         for _ in range(self.rowCount()):
             self.remove_row()
+
+
+class LineEditManager():
+    def __init__(self,tab):
+        self.children_set = set()
+        self.unique_set = set()
+        self.line_edit_objs = {}
+        self.tab = tab
+        self.tab_pages_objs = {}
+        self.children_except = {}
+
+        #editingFinished()
+        #textChanged(const QString &text)
+        #textEdited(const QString &text)
+        #.text().strip()
+
+    def get_unique_name(self,text):
+        lst = [i[len(text):] for i in self.unique_set if text==i[:len(text)]]
+        i = 1
+        while True:
+            if str(i) not in lst:
+                return text+str(i)
+            else:
+                i+=1
+
+    def add_lineEdit(self, obj, page):
+        if obj not in self.line_edit_objs:
+            self.line_edit_objs[obj] = obj.text().strip()
+            self.tab_pages_objs[obj] = page
+            obj.textChanged.connect(lambda t,o=obj:self.editingFinished(t,o))
+            if self.line_edit_objs[obj] not in self.unique_set and self.line_edit_objs[obj]!='':
+                self.unique_set.add(self.line_edit_objs[obj])
+
+            self.editChildren()
+        
+
+    def remove_lineEdit(self, obj):
+        if obj in self.line_edit_objs:
+            self.unique_set.discard(obj.text().strip())
+            obj.textChanged.disconnect()
+            del self.line_edit_objs[obj]
+            del self.tab_pages_objs[obj]
+
+            self.editChildren()
+
+    @traceback_erors
+    def add_child(self,child,line=None):
+        self.children_set.add(child)
+        self.children_except[child] = line
+        if line is not None:
+            lst = list(self.unique_set-set([line.text().strip()]))
+        else:
+            lst = list(self.unique_set)
+        child.addItems(["Нет"]+lst)
+        child.setCurrentText("Нет")
+        
+    @traceback_erors
+    def remove_child(self,child):
+        if child in self.children_except:
+            self.children_set.discard(child)
+            del self.children_except[child]
+
+
+    def editChildren(self, pn=None):
+        for child in self.children_set:
+            cr_t = child.currentText()
+            if pn is not None:
+                cr_t = pn[1] if cr_t==pn[0] else cr_t
+            cr_t = "Нет" if cr_t not in self.unique_set else cr_t
+            child.clear()
+            if self.children_except[child] is not None:
+                lst = list(self.unique_set-set([self.children_except[child].text().strip()]))
+            else:
+                lst = list(self.unique_set)
+            child.addItems(["Нет"]+lst)
+            child.setCurrentText(cr_t)
+
+    @traceback_erors
+    def editingFinished(self,new_text,obj):
+        new_text = new_text.strip()
+        old_text = self.line_edit_objs[obj]
+        pn = (old_text,new_text)
+
+        if new_text!=old_text:
+            if new_text!='' and new_text not in self.unique_set:
+                self.unique_set.discard(old_text)
+                self.unique_set.add(new_text)
+                self.line_edit_objs[obj] = new_text
+
+                ind = self.tab.indexOf(self.tab_pages_objs[obj])
+                self.tab.setTabText(ind,new_text)
+
+                self.editChildren(pn)
+
+            elif new_text=='' and old_text!='':
+                obj.setText(old_text)
+
+        #obj.clearFocus()
+        #print("test")

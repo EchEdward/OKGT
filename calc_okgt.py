@@ -73,9 +73,9 @@ R_bypass = 10**-5
 def get_vl_sector(key,vl_info):
     lst = {}
     for name, value in vl_info.items():
-        branches = {}
-        for k, branch in value["branches"].items():
-            branches[k] = (branch["supportN"],branch["supportK"])
+        #branches = {}
+        """ for k, branch in value["branches"].items():
+            branches[k] = (branch["supportN"],branch["supportK"]) """
         
         lst[name] = []
 
@@ -83,12 +83,13 @@ def get_vl_sector(key,vl_info):
             if sector["type"] == "with_okgt":
                 if sector["link_okgt"] == key:
                     d_sector = {k:v for k,v in sector.items()}
-                    d_sector["branch_supports"] = branches[d_sector["link_branch"]]
+                    #d_sector["branch_supports"] = branches[d_sector["link_branch"]]
                     d_sector["name_vl"] = name
                     lst[name].append(d_sector)
 
         if len(lst[name])==0:
             del lst[name]
+    
     return lst  
 
 def find_entry(dct, length):
@@ -1421,7 +1422,7 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30, callback=simple_call
 
 
 if __name__=='__main__':
-    from initial_data2 import okgt_info, vl_info, ps_info, rpa_info
+    from initial_data import okgt_info, vl_info, ps_info, rpa_info
     import matplotlib.pyplot as plt
     
     result = main_calc(okgt_info, vl_info, ps_info, rpa_info)

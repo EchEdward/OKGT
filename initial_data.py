@@ -5,7 +5,7 @@ description of property parameters:
 
 "way_grounded" : "left", "right", "not", "both" "inside"
 "type": "VL", "single", "single_dielectric"
-"PS": "left", "right", "not", "both","inside"
+"PS": "left", "right", "not", "both",
 "link_okgt" - generate automaticlu, without people
 """
 
@@ -100,8 +100,7 @@ vl_info = {
     "VL #1": {
         "branches" : {
             ("1","2") : {
-                "supportN" : 1,
-                "supportK" : 61,
+                
                 "PS": "both",
                 "PS_name_1": "PS_1",
                 "PS_name_2": "PS_2",
@@ -189,7 +188,7 @@ vl_info = {
                 "link_branch": ("1","2"),
                 "supportN" : 51,
                 "supportK" : 61,
-                "type": "one",
+                "type": "not",
                 "is_okgt":None,
                 "groundwire1": "AC 70/11"
             },
@@ -260,8 +259,6 @@ vl_info = {
     "VL #2": {
         "branches" : {
             ("1","2") : {
-                "nodeN": "1",
-                "nodeK": "2",
                 "supportN" : 46,
                 "supportK" : 1,
                 "PS": "both",
@@ -549,7 +546,7 @@ vl_info = {
             ("2","3") : {
                 "supportN" : 26,
                 "supportK" : 36,
-                "PS": "no",
+                "PS": "not",
             },
             ("3","4") : {
                 "supportN" : 36,
@@ -1163,8 +1160,8 @@ rpa_info = {
         "Tswitch": 0.13,
         "Tautomation":0.03,
         "arc_times":3,
-        "rpa_I_setting":[2.206, 1.991, 1.846, 1.5],
-        "rpa_time_setting":[0.05,0.7,1.6,2.6],
+        "rpa_I_setting":[1.5, 2.206, 1.991, 1.846],
+        "rpa_time_setting":[2.6,0.05,0.7,1.6],
         "arc_setting":[[0,0.3,0.6,1.0],[0,0.4,0.7,1.1],[0,0.5,0.8,1.2]],
         "arc_pause":[0.12,0.15,0.2],
         "I_sc":[1.668,1.711,1.755,1.8,1.846,1.893,1.942,1.991,2.043,2.096,2.15,2.206,2.264,2.324,2.387],

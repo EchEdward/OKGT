@@ -12,7 +12,8 @@ from PyQt5.QtCore import QPersistentModelIndex, Qt,  QSize, QModelIndex, QThread
 import sys
 import os
 
-from table_classes import traceback_erors, OkgtSectorTable, OkgtSingleTable, PSTable, NodeTable
+from table_classes import traceback_erors, OkgtSectorTable, OkgtSingleTable, PSTable, NodeTable, LineEditManager,\
+    VlParamsTable, VlSectorTable, VlPsParamsTable, VlCommonChainsTable
 
 from calc_okgt import k_supports, k_conductors, main_calc
 
@@ -50,14 +51,14 @@ class MyWindow(QMainWindow):
 
         
         self.Okgt_Widget = QWidget()
-        Vl_Tabs = QTabWidget()
+        self.Vl_Tabs = QTabWidget()
         self.Ps_Widget = QWidget()
         Rpa_Tabs = QTabWidget()
         Rez_Tabs = QTabWidget()
 
         self.mainTabWidget.addTab(self.Okgt_Widget,"ОКГТ")
         self.mainTabWidget.addTab(self.Ps_Widget,"ПС")
-        self.mainTabWidget.addTab(Vl_Tabs,"ВЛ")
+        self.mainTabWidget.addTab(self.Vl_Tabs,"ВЛ")
         self.mainTabWidget.addTab(Rpa_Tabs,"РЗА")
         self.mainTabWidget.addTab(Rez_Tabs,"Результаты")
 
@@ -70,6 +71,14 @@ class MyWindow(QMainWindow):
         self.okgt_tab_maker()
         self.ps_tab_maker()
         self.MenuBarMaker()
+
+        self.le_manager = LineEditManager(self.Vl_Tabs)
+        self.vl_liks = {}
+        self.vl_settings_dict = {
+            "conductors":"Провода","phases":"Фазировка","supports":"Опоры","groundwires":"Грозотросы",\
+            "PSs":"ПС","grounded":"Заземление проводов","countercables":"Противовес","commonchains":"Смежные цепи",
+        }
+        self.vl_settings_dict_rev = {v:k for k,v in self.vl_settings_dict.items()}
 
         
 
@@ -153,6 +162,18 @@ class MyWindow(QMainWindow):
         remove_params.triggered.connect(self.RemoveParams)
         editMenu.addAction(remove_params)
 
+        add_tab = QAction( '&Добавить вкладку', self) #QIcon('exit.png'),
+        add_tab.setShortcut("Ctrl+F")
+        add_tab.setStatusTip('Добаваить новую вкладку')
+        add_tab.triggered.connect(self.AddTab)
+        editMenu.addAction(add_tab)
+
+        remove_tab = QAction( '&Удалить вкладку', self) #QIcon('exit.png'),
+        remove_tab.setShortcut("Ctrl+G")
+        remove_tab.setStatusTip('Удалить текущую вкладку')
+        remove_tab.triggered.connect(self.RemoveTab)
+        editMenu.addAction(remove_tab)
+
         clear_tab = QAction( '&Очистить вкладку', self) #QIcon('exit.png'),
         clear_tab.setShortcut("Ctrl+Shift+D")
         clear_tab.setStatusTip('Очистить текущую вкладку')
@@ -167,18 +188,38 @@ class MyWindow(QMainWindow):
             self.Okgt_node_table.add_row()
         elif ind == 1:
             self.Ps_table.add_row()
+        elif ind == 2:
+            ind = self.Vl_Tabs.currentIndex()
+            if ind>-1:
+                wd = self.Vl_Tabs.widget(ind)
+                data = self.vl_liks[wd]
+                data["branches"].add_row()
         
 
     def AddSector(self):
         ind = self.mainTabWidget.currentIndex()
         if ind == 0:
             self.Okgt_sector_table.add_row()
+        elif ind == 2:
+            ind = self.Vl_Tabs.currentIndex()
+            if ind>-1:
+                wd = self.Vl_Tabs.widget(ind)
+                data = self.vl_liks[wd]
+                data["sector"].add_row()
         
 
     def AddParams(self):
         ind = self.mainTabWidget.currentIndex()
         if ind == 0:
             self.Okgt_single_table.add_row()
+        elif ind == 2:
+            ind = self.Vl_Tabs.currentIndex()
+            if ind>-1:
+                wd = self.Vl_Tabs.widget(ind)
+                data = self.vl_liks[wd]
+                p_ind = data["params_tab"].currentIndex()
+                header_t = data["params_tab"].tabText(p_ind)
+                data["params"][self.vl_settings_dict_rev[header_t]].add_row()
         
 
     def RemoveBranch(self):
@@ -187,18 +228,38 @@ class MyWindow(QMainWindow):
             self.Okgt_node_table.remove_row()
         elif ind == 1:
             self.Ps_table.remove_row()
+        elif ind == 2:
+            ind = self.Vl_Tabs.currentIndex()
+            if ind>-1:
+                wd = self.Vl_Tabs.widget(ind)
+                data = self.vl_liks[wd]
+                data["branches"].remove_row()
         
 
     def RemoveSector(self):
         ind = self.mainTabWidget.currentIndex()
         if ind == 0:
             self.Okgt_sector_table.remove_row()
+        elif ind == 2:
+            ind = self.Vl_Tabs.currentIndex()
+            if ind>-1:
+                wd = self.Vl_Tabs.widget(ind)
+                data = self.vl_liks[wd]
+                data["sector"].remove_row()
         
 
     def RemoveParams(self):
         ind = self.mainTabWidget.currentIndex()
         if ind == 0:
             self.Okgt_single_table.remove_row()
+        elif ind == 2:
+            ind = self.Vl_Tabs.currentIndex()
+            if ind>-1:
+                wd = self.Vl_Tabs.widget(ind)
+                data = self.vl_liks[wd]
+                p_ind = data["params_tab"].currentIndex()
+                header_t = data["params_tab"].tabText(p_ind)
+                data["params"][self.vl_settings_dict_rev[header_t]].remove_row()
         
 
     def ClearTab(self):
@@ -209,6 +270,33 @@ class MyWindow(QMainWindow):
             self.Okgt_single_table.clear_table()
         elif ind == 1:
             self.Ps_table.clear_table()
+        elif ind == 2:
+            ind = self.Vl_Tabs.currentIndex()
+            if ind>-1:
+                wd = self.Vl_Tabs.widget(ind)
+                data = self.vl_liks[wd]
+                data["branches"].clear_table()
+                data["sector"].clear_table()
+                for table in data["params"].values():
+                    table.clear_table()
+
+
+    def AddTab(self):
+        ind = self.mainTabWidget.currentIndex()
+        if ind == 2:
+            print("Add VL")
+            self.add_vl_tab()
+        elif ind == 3:
+            
+            print("Add RPA")
+
+    def RemoveTab(self):
+        ind = self.mainTabWidget.currentIndex()
+        if ind == 2:
+            print("Remove VL")
+            self.remove_vl_tab()
+        elif ind == 3:
+            print("Remove RPA")
         
 
 
@@ -239,8 +327,74 @@ class MyWindow(QMainWindow):
         ps_vbl = QVBoxLayout()
         ps_vbl.addWidget(self.Ps_table)
         self.Ps_Widget.setLayout(ps_vbl)
-        
 
+
+    def add_vl_tab(self):
+        line = QLineEdit()
+        
+        vl_branches = NodeTable()
+        
+        vl_sectors = VlSectorTable(vl_branches,self.Okgt_sector_table,self.cntr_pr)
+        vl_sectors.setMinimumHeight(180)
+        
+        d = {}
+        param_tabs = QTabWidget()
+        for k,v in self.vl_settings_dict.items():
+            if k == "PSs":
+                table = VlPsParamsTable(vl_branches,self.Ps_table,self.cntr_pr)
+            elif k == "commonchains":
+                table = VlCommonChainsTable(vl_branches,self.vl_liks,self.le_manager,line,self.cntr_pr) 
+            else:
+                table = VlParamsTable(vl_branches,k,self.cntr_pr)
+                
+            param_tabs.addTab(table,v)
+            d[k] = table
+        
+        vl_spltV = QSplitter(Qt.Vertical)
+        vl_spltV.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        v_top = QVBoxLayout()
+        h_top = QHBoxLayout()
+        h_top.addWidget(QLabel("Название ВЛ:"))
+        h_top.addWidget(line)
+        v_top.addLayout(h_top)
+        v_top.addWidget(vl_branches)
+        v_top.setContentsMargins(0, 0, 0, 0)
+        top = QWidget()
+        top.setLayout(v_top)
+
+        vl_spltV.addWidget(top)
+        vl_spltV.addWidget(vl_sectors)
+        vl_spltV.addWidget(param_tabs)
+        vl_spltV.setStretchFactor(1, 3) 
+        vl_spltV.setStretchFactor(3, 2) 
+        vl_spltV.setContentsMargins(11, 5, 11, 0)
+
+        ind = self.Vl_Tabs.addTab(vl_spltV,"")
+
+        self.le_manager.add_lineEdit(line,vl_spltV)
+        name = self.le_manager.get_unique_name("ВЛ № ")
+        line.setText(name)
+        #setTabText
+        self.Vl_Tabs.setCurrentIndex(ind)
+
+        self.vl_liks[vl_spltV] = {
+            "line":line,
+            "branches":vl_branches,
+            "sector":vl_sectors,
+            "params_tab":param_tabs,
+            "params":d,
+        }
+
+
+    def remove_vl_tab(self, s_int=None):
+        ind = self.Vl_Tabs.currentIndex() if s_int is None else s_int
+        if ind>-1:
+            wd = self.Vl_Tabs.widget(ind)
+            data = self.vl_liks[wd]
+            self.le_manager.remove_lineEdit(data["line"])
+            self.Vl_Tabs.removeTab(ind)
+            del self.vl_liks[wd]
         
     #@traceback_erors 
     def OpenFile(self):
@@ -248,16 +402,37 @@ class MyWindow(QMainWindow):
         self.Okgt_sector_table.write_table(okgt_info)
         self.Okgt_single_table.write_table(okgt_info)
         self.Ps_table.write_table(ps_info)
+
+        for ind in range(self.Vl_Tabs.count()-1,-1,-1):
+            self.remove_vl_tab(ind)
+
+        for ind, (name,info) in enumerate(vl_info.items()):
+            self.add_vl_tab()
+            data = self.vl_liks[self.Vl_Tabs.widget(ind)]
+            data['line'].setText(name)
+            data["branches"].write_table(info,vl=True)
+            data["sector"].write_table(info)
+            
+            for t_n, table in data["params"].items():
+                if t_n!="commonchains":
+                    table.write_table(info)
+
+         
         
     #@traceback_erors
     def ReadTables(self):
         
-        global okgt_info, ps_info
+        global okgt_info, ps_info, vl_info
         lst = self.Okgt_node_table.read_table()
         dct = self.Okgt_sector_table.read_table(lst)
         okgt_info = self.Okgt_single_table.read_table(dct)
         ps_info = self.Ps_table.read_table()
         #print(okgt_info_new)
+
+        for data in self.vl_liks.values():
+            name = data['line'].text()
+            br_lst = data["branches"].read_table()
+
         
 
 
