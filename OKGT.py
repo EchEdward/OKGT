@@ -268,6 +268,7 @@ class MyWindow(QMainWindow):
             self.Okgt_node_table.clear_table()
             self.Okgt_sector_table.clear_table()
             self.Okgt_single_table.clear_table()
+            
         elif ind == 1:
             self.Ps_table.clear_table()
         elif ind == 2:
@@ -417,6 +418,9 @@ class MyWindow(QMainWindow):
                 if t_n!="commonchains":
                     table.write_table(info)
 
+        for ind, info in enumerate(vl_info.values()):
+            data = self.vl_liks[self.Vl_Tabs.widget(ind)]
+            data["params"]["commonchains"].write_table(info)
          
         
     #@traceback_erors
@@ -429,11 +433,26 @@ class MyWindow(QMainWindow):
         ps_info = self.Ps_table.read_table()
         #print(okgt_info_new)
 
+        d_lst = {}
+        d_com_tables = {}
+        vl_info_new = {}
         for data in self.vl_liks.values():
             name = data['line'].text()
             br_lst = data["branches"].read_table()
+            d_lst[name] = br_lst
+            d_com_tables[name] = data["params"]["commonchains"]
+            vl_info_new[name] = {}
+
+            vl_info_new[name].update([(key,val) for key,val in data["sector"].read_table(br_lst).items()])
+            for t_n, table in data["params"].items():
+                if t_n!="commonchains":
+                    vl_info_new[name].update([(key,val) for key,val in table.read_table(br_lst).items()])
 
         
+        for name, table in d_com_tables.items():
+            vl_info_new[name].update([(key,val) for key,val in table.read_table(name,d_lst).items()])
+
+        vl_info = vl_info_new
 
 
         #self.TWGr.addTab(self.Tabs[self.vkl],self.nm_ivl[i]) # Добавляем закладку в QTabWidget

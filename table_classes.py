@@ -199,6 +199,13 @@ class DownloadDelegate(QItemDelegate):
             else: 
                 return QItemDelegate.createEditor(self, parent, option, index)
 
+        elif self.tp=="vl_commonchains": 
+            if index.column() in (1,2,5,6):
+                lineedit.setValidator(MyValidator("int",lineedit,minus=False))
+                return lineedit
+            else: 
+                return QItemDelegate.createEditor(self, parent, option, index)
+
         else:
             return QItemDelegate.createEditor(self, parent, option, index)
 
@@ -219,6 +226,8 @@ class TableTempalte(QTableWidget):
         #self.nodes = set()
         self.branches = set()
         self.UniqueDct = {}
+
+        self.ComboConnections = set()
 
         
 
@@ -358,13 +367,17 @@ class TableTempalte(QTableWidget):
         
     @traceback_erors
     def setComboDependence(self,ind):
+        exist_connects = set()
         for key, val in self.spCombo.items():
             if len(key)==2:
                 for (colum,_) in key[1]:
                     comb = self.cellWidget(ind,colum)
-                    comb.currentTextChanged.connect(lambda t, k=key, o=comb,col=colum: self.ComboChangeEvent(t,k,o,col))
+                    if colum not in exist_connects and comb not in self.ComboConnections:
+                        comb.currentTextChanged.connect(lambda t, k=key, o=comb,col=colum: self.ComboChangeEvent(t,o,col))
+                        exist_connects.add(colum)
+                        self.ComboConnections.add(comb)
                     val.add(comb)
-                    self.ComboChangeEvent(comb.currentText(),key,comb,colum)
+                    self.ComboChangeEvent(comb.currentText(),comb,colum)
                                
     @traceback_erors
     def removeComboDependence(self,ind):
@@ -372,39 +385,42 @@ class TableTempalte(QTableWidget):
             if len(key)==2:
                 for (colum,_) in key[1]:
                     comb = self.cellWidget(ind,colum)
-                    comb.currentTextChanged.disconnect()
+                    if comb in self.ComboConnections:
+                        comb.currentTextChanged.disconnect()
+                        self.ComboConnections.discard(comb)
                     val.discard(comb)
          
        
     @traceback_erors
-    def ComboChangeEvent(self,text,key,obj,colum):
-        if len(key)==2:
-            for ind in range(self.rowCount()):
-                if self.cellWidget(ind,colum)==obj:
-                    break
-            
-            if len(key[0])==1:
-                txt = self.item(ind,key[0][0]).text()
-                tr = txt == ""
-            elif len(key[0])>1:
-                txt = key[0][:-1].join([self.item(ind,k).text() for k in key[0][:-1]])
-                tr = sum([self.item(ind,k).text()=="" for k in key[0][:-1]])>0
+    def ComboChangeEvent(self,text,obj,colum):
+        for key in self.spCombo:
+            if len(key)==2:
+                for ind in range(self.rowCount()):
+                    if self.cellWidget(ind,colum)==obj:
+                        break
+                
+                if len(key[0])==1:
+                    txt = self.item(ind,key[0][0]).text()
+                    tr = txt == ""
+                elif len(key[0])>1:
+                    txt = key[0][:-1].join([self.item(ind,k).text() for k in key[0][:-1]])
+                    tr = sum([self.item(ind,k).text()=="" for k in key[0][:-1]])>0
 
-            if not tr:
+                if not tr:
 
-                conformity = [1 if self.cellWidget(ind,c).currentText()==m else 0 for c,m in key[1]]
+                    conformity = [1 if self.cellWidget(ind,c).currentText()==m else 0 for c,m in key[1]]
 
-                if sum(conformity)==len(conformity):
-                    self.spColums[key].add(txt)
-                else:
-                    self.spColums[key].discard(txt)
+                    if sum(conformity)==len(conformity):
+                        self.spColums[key].add(txt)
+                    else:
+                        self.spColums[key].discard(txt)
 
-                for child in self.childrenList[key]:
-                    cr_t = child.currentText()
-                    cr_t = "Нет" if cr_t not in self.spColums[key] else cr_t
-                    child.clear()
-                    child.addItems(["Нет"]+list(self.spColums[key]))
-                    child.setCurrentText(cr_t)
+                    for child in self.childrenList[key]:
+                        cr_t = child.currentText()
+                        cr_t = "Нет" if cr_t not in self.spColums[key] else cr_t
+                        child.clear()
+                        child.addItems(["Нет"]+list(self.spColums[key]))
+                        child.setCurrentText(cr_t)
                
     #@traceback_erors               
     def edit(self, index, trigger, event):
@@ -991,7 +1007,7 @@ class VlPsParamsTable(TableTempalte):
         PSs = [{"PS_name":i["PS"],"length":i["length"]} for i in rez]
 
         for branch, info in branches.items():
-            current_ps = list(filter(lambda x: x == branch, rez.keys()))
+            current_ps = list(filter(lambda x: x["link_branch"] == branch, rez))
             if len(current_ps)==2:
                 ps1,ps2 = current_ps[0:2]
                 if (ps1["side"]=="left" and ps2["side"]=="right") or (ps1["side"]=="right" and ps2["side"]=="left"):
@@ -1065,10 +1081,20 @@ class VlCommonChainsTable(TableTempalte):
 
         self.prevComboText = {}
         self.ThisToThat = {}
-        self.ThatToThis = {}
-
+        self.vlComboEventResolution = True
+        self.editTableResolution = True
+        self.branchComboEventResolution = True
+        self.cell_links = {1:5,2:6,5:1,6:2}
+        
+    def TableFinding(self,text):
+        for page in self.VlObj.values():
+            if page['line'].text().strip() == text:
+                break
+        else:
+            return None
+        return page
+        
     
-
     @traceback_erors
     def add_row(self):
         super().add_row()
@@ -1077,6 +1103,7 @@ class VlCommonChainsTable(TableTempalte):
         branch = UserComboBox(self.timer)
         self.NodeObj.add_child(((0,1,self.separator),),branch)
         self.setCellWidget(ind,0, branch)
+        branch.currentTextChanged.connect(lambda t, o=branch: self.BranchChanged(t,o))
 
         self.setItem(ind,1, CustomTableWidgetItem(""))
         self.setItem(ind,2, CustomTableWidgetItem(""))
@@ -1091,6 +1118,7 @@ class VlCommonChainsTable(TableTempalte):
         vl_branch = UserComboBox(self.timer)
         vl_branch.addItems(["Нет"])
         self.setCellWidget(ind,4, vl_branch)
+        vl_branch.currentTextChanged.connect(lambda t, o=vl_branch: self.BranchChanged(t,o,own=False))
 
         self.setItem(ind,5, CustomTableWidgetItem(""))
         self.setItem(ind,6, CustomTableWidgetItem(""))
@@ -1115,7 +1143,55 @@ class VlCommonChainsTable(TableTempalte):
             if key1 is not None:
                 self.VlObj[key1]["branches"].remove_child(((0,1,self.separator),),self.cellWidget(ind,4))
 
+            self.remove_other_row(ind)
+
         super().remove_row()
+
+    def add_other_row(self,ind,page):
+        if self.vlComboEventResolution:
+            table = page["params"]["commonchains"]
+            table.vlComboEventResolution = False
+            table.editTableResolution = False
+            table.branchComboEventResolution = False
+
+            table.add_row()
+            row = table.rowCount()-1
+            obj = self.cellWidget(ind,3)
+            other_obj = table.cellWidget(row,3)
+            other_obj.setCurrentText(self.line.text().strip())
+            self.ThisToThat[obj] = (other_obj,table)
+            table.ThisToThat[other_obj] = (obj,self)
+
+            table.item(row,1).setText(self.item(ind,5).text())
+            table.item(row,2).setText(self.item(ind,6).text())
+            table.item(row,5).setText(self.item(ind,1).text())
+            table.item(row,6).setText(self.item(ind,2).text())
+
+            table.cellWidget(row,0).setCurrentText(self.cellWidget(ind,4).currentText())
+            table.cellWidget(row,4).setCurrentText(self.cellWidget(ind,0).currentText())
+
+            table.vlComboEventResolution = True
+            table.editTableResolution = True
+            table.branchComboEventResolution = True
+
+    def remove_other_row(self,ind):
+        if self.vlComboEventResolution:
+            obj = self.cellWidget(ind,3)
+            if obj in self.ThisToThat:
+                other_obj, table = self.ThisToThat[obj]
+                table.vlComboEventResolution = False
+                for row in range(table.rowCount()):
+                    if table.cellWidget(row,3) == other_obj:
+                        break
+                table.setCurrentCell(row, 1)
+                table.remove_row()
+
+                del self.ThisToThat[obj]
+                del table.ThisToThat[other_obj]
+
+                table.vlComboEventResolution = True
+            
+
 
     #@traceback_erors
     def setVlBranchCombo(self,t,obj):
@@ -1125,32 +1201,127 @@ class VlCommonChainsTable(TableTempalte):
         else:
             ind = -1
         
-        for key1 in self.VlObj:
-            if self.VlObj[key1]["line"].text() == obj.currentText() != "Нет":
-                break
-        else:
-            key1 = None
-
         prev_text = self.prevComboText[obj]
-        for key2 in self.VlObj:
-            if self.VlObj[key2]["line"].text() == prev_text:
-                break
-        else:
-            key2 = None
+        page1 = self.TableFinding(prev_text)
+        page2 = self.TableFinding(obj.currentText())
+
+        
+        if ind>-1 and page1 is None and page2 is not None:
+            page2["branches"].add_child(((0,1,self.separator),),self.cellWidget(ind,4))
+
+            self.add_other_row(ind,page2)
+
+        elif ind>-1 and page1 is not None and page2 is not None:
+            page1["branches"].remove_child(((0,1,self.separator),),self.cellWidget(ind,4))
+            page2["branches"].add_child(((0,1,self.separator),),self.cellWidget(ind,4))
+
+            self.remove_other_row(ind)
+            self.add_other_row(ind,page2)
+
+        elif ind>-1 and page1 is not None and page2 is None:
+            page1["branches"].remove_child(((0,1,self.separator),),self.cellWidget(ind,4))
+
+            self.remove_other_row(ind)
+
+        self.prevComboText[obj] = t
 
 
-        if ind>-1 and key1 is not None:
-            if key2 is not None:
-                self.VlObj[key2]["branches"].remove_child(((0,1,self.separator),),self.cellWidget(ind,4))
+    @traceback_erors
+    def BranchChanged(self,t,obj,own=True):
+        if self.branchComboEventResolution:
+            f,s = (0,4) if own else (4,0)
+            for ind in range(self.rowCount()):
+                if self.cellWidget(ind,f) == obj:
+                    break
 
-            self.VlObj[key1]["branches"].add_child(((0,1,self.separator),),self.cellWidget(ind,4))
+            if self.cellWidget(ind,3) in self.ThisToThat:
+                other_obj, table = self.ThisToThat[self.cellWidget(ind,3)]
+                table.branchComboEventResolution = False
+                for row in range(table.rowCount()):
+                    if table.cellWidget(row,3) == other_obj:
+                        break
+
+                other_branch = table.cellWidget(row,s)
+                other_branch.setCurrentText(t)
+                table.branchComboEventResolution = True
+
+
+    def closeEditor(self, editor, hint):
+        super().closeEditor(editor, hint)
+        if self.editTableResolution:
+            i1 = self.currentRow()
+            if self.cellWidget(i1,3) in self.ThisToThat:
+                other_obj, table = self.ThisToThat[self.cellWidget(i1,3)]
+                table.editTableResolution = False
+                for i2 in range(table.rowCount()):
+                    if table.cellWidget(i2,3) == other_obj:
+                        break
+
+                j1 = self.currentColumn()
+                j2 = self.cell_links[j1]
                 
-            self.prevComboText[obj] = t
+                table.item(i2,j2).setText(self.item(i1,j1).text())
 
-        if ind>-1 and key1 is None:
-            if key2 is not None:
-                self.VlObj[key2]["branches"].remove_child(((0,1,self.separator),),self.cellWidget(ind,4))
-            self.prevComboText[obj] = t
+                table.editTableResolution = True
+
+    def clear_table(self):
+        for _ in range(self.rowCount()):
+            self.remove_row()
+
+    @traceback_erors
+    def read_table(self, vl_name, d_lst):
+        rez = []
+        sep_keys = {name:{self.separator.join(key):key for key in lst} for name, lst in d_lst.items()}
+
+        for i in range(self.rowCount()):
+            if self.cellWidget(i,0).currentText() in sep_keys[vl_name]:
+                d = {
+                    "link_branch": sep_keys[vl_name][self.cellWidget(i,0).currentText()],
+                    "supportN" : None if self.item(i,1).text()=="" else int(self.item(i,1).text()),
+                    "supportK" : None if self.item(i,2).text()=="" else int(self.item(i,2).text()),
+                    "other_vl_name": self.cellWidget(i,3).currentText(),
+                    "other_link_branch": sep_keys[self.cellWidget(i,3).currentText()][self.cellWidget(i,4).currentText()],
+                    "other_supportN" : None if self.item(i,5).text()=="" else int(self.item(i,5).text()),
+                    "other_supportK" : None if self.item(i,6).text()=="" else int(self.item(i,6).text()),
+                }
+                
+                rez.append(d)
+        return {"commonchains":rez}
+
+    @traceback_erors
+    def write_table(self, vl_info):
+        self.clear_table()
+        for i in range(self.NodeObj.rowCount()):
+            self.NodeObj.add_sp(i)
+
+
+        self.vlComboEventResolution = False
+        self.editTableResolution = False
+        self.branchComboEventResolution = False
+        
+        
+        for i, sector in enumerate(vl_info["commonchains"]):
+            self.add_row()
+            
+            self.cellWidget(i,0).setCurrentText(self.separator.join(sector["link_branch"]))
+            
+            self.item(i,1).setText(str("" if sector["supportN"] is None else sector["supportN"]))
+            self.item(i,2).setText(str("" if sector["supportK"] is None else sector["supportK"]))
+
+            self.cellWidget(i,3).setCurrentText(sector["other_vl_name"])
+            
+            self.cellWidget(i,4).setCurrentText(self.separator.join(sector["other_link_branch"]))
+
+            self.item(i,5).setText(str("" if sector["other_supportN"] is None else sector["other_supportN"]))
+            self.item(i,6).setText(str("" if sector["other_supportK"] is None else sector["other_supportK"]))
+   
+
+        self.vlComboEventResolution = True
+        self.editTableResolution = True
+        self.branchComboEventResolution = True
+            
+            
+        
 
 
 class VlParamsTable(TableTempalte):
