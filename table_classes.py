@@ -206,8 +206,34 @@ class DownloadDelegate(QItemDelegate):
             else: 
                 return QItemDelegate.createEditor(self, parent, option, index)
 
+        elif self.tp=="SCLine":
+            if index.column() == 0:
+                lineedit.setValidator(MyValidator("duble",lineedit,minus=False))
+                return lineedit
+            elif index.column() == 1:
+                lineedit.setValidator(MyValidator("duble",lineedit,minus=True))
+                return lineedit
+            else: 
+                return QItemDelegate.createEditor(self, parent, option, index)
+
+        elif self.tp["tp"]=="RPASettings":
+            if index.column() in (0,1):
+                lineedit.setValidator(MyValidator("duble",lineedit,minus=False))
+                return lineedit
+            elif index.column() > 1 and self.tp["relative"]:
+                lineedit.setValidator(MyValidator("duble",lineedit,minus=True))
+                return lineedit
+            elif index.column() > 1 and not self.tp["relative"]:
+                lineedit.setValidator(MyValidator("duble",lineedit,minus=False))
+                return lineedit
+            else: 
+                return QItemDelegate.createEditor(self, parent, option, index)
+
         else:
             return QItemDelegate.createEditor(self, parent, option, index)
+
+
+        #{"tp":"RPASettings","relative":True}
 
 
 
@@ -1131,6 +1157,7 @@ class VlCommonChainsTable(TableTempalte):
             self.NodeObj.remove_child(((0,1,self.separator),),branch)
             
             vl_name = self.cellWidget(ind,3)
+            
             self.le_manager.remove_child(vl_name)
             vl_name.currentTextChanged.disconnect()
 
@@ -1295,30 +1322,32 @@ class VlCommonChainsTable(TableTempalte):
             self.NodeObj.add_sp(i)
 
 
-        self.vlComboEventResolution = False
-        self.editTableResolution = False
-        self.branchComboEventResolution = False
+        #self.vlComboEventResolution = False
+        #self.editTableResolution = False
+        #self.branchComboEventResolution = False
         
         
         for i, sector in enumerate(vl_info["commonchains"]):
             self.add_row()
             
             self.cellWidget(i,0).setCurrentText(self.separator.join(sector["link_branch"]))
-            
+
             self.item(i,1).setText(str("" if sector["supportN"] is None else sector["supportN"]))
             self.item(i,2).setText(str("" if sector["supportK"] is None else sector["supportK"]))
+
+            self.item(i,5).setText(str("" if sector["other_supportN"] is None else sector["other_supportN"]))
+            self.item(i,6).setText(str("" if sector["other_supportK"] is None else sector["other_supportK"]))
 
             self.cellWidget(i,3).setCurrentText(sector["other_vl_name"])
             
             self.cellWidget(i,4).setCurrentText(self.separator.join(sector["other_link_branch"]))
 
-            self.item(i,5).setText(str("" if sector["other_supportN"] is None else sector["other_supportN"]))
-            self.item(i,6).setText(str("" if sector["other_supportK"] is None else sector["other_supportK"]))
+            
    
 
-        self.vlComboEventResolution = True
-        self.editTableResolution = True
-        self.branchComboEventResolution = True
+        #self.vlComboEventResolution = True
+        #self.editTableResolution = True
+        #self.branchComboEventResolution = True
             
             
         
@@ -1686,6 +1715,8 @@ class PSTable(TableTempalte):
         self.setColumnWidth(1,70)
 
         self.setUniqueNamesColumn([0])
+
+        self.setLinkParentToChildren([((0,),)])
         
         
         
@@ -1722,6 +1753,256 @@ class PSTable(TableTempalte):
             self.remove_row()
 
 
+
+
+class RPASettingsTable(QTableWidget):
+    def __init__(self,parent=None):
+        super().__init__(parent)
+
+        self.setColumnCount(2)
+        self.setRowCount(1)
+        self.setSpan(0, 0, 1, 2)
+        self.setItem(0,0, CustomTableWidgetItem("Длительность паузы АПВ, с"))
+        self.item(0,0).setFlags(Qt.ItemIsEditable)
+        self.setHorizontalHeaderLabels(["Iуст, кА","tуст, с"])
+        self.setColumnWidth(0,90)
+        self.setColumnWidth(1,90)
+
+        self.typeDelegate = {"tp":"RPASettings","relative":True}
+
+        self.setItemDelegate(DownloadDelegate(self.typeDelegate))
+
+
+    @traceback_erors
+    def add_row(self):
+        ind = self.currentRow()+1 if self.currentRow() != -1 else self.rowCount()
+        self.insertRow(ind)
+        
+        for j in range(self.columnCount()):
+            self.setItem(ind,j, CustomTableWidgetItem(""))
+        
+        self.selectionModel().clearSelection()
+        self.setCurrentCell(-1,-1)
+
+    @traceback_erors  
+    def remove_row(self):
+        if self.rowCount()>1:
+            ind = self.currentRow() if self.currentRow() != -1 else self.rowCount()-1
+
+            self.removeRow(ind)
+            self.selectionModel().clearSelection()
+            self.setCurrentCell(-1,-1)
+
+    @traceback_erors 
+    def setColumn(self,ln):
+        c_l = self.columnCount()
+        if ln != c_l-2: 
+            if c_l-2<ln:
+                self.setColumnCount(ln+2)
+                self.setHorizontalHeaderLabels(["Iуст, кА","tуст, с"]+[f"АПВ№{i+1}" for i in range(ln)])
+                for j in range(c_l,ln+2):
+                    self.setColumnWidth(j,60)
+                    self.setItem(0,j, CustomTableWidgetItem(""))
+                    for i in range(self.currentRow()):
+                        self.setItem(i,j, CustomTableWidgetItem(""))
+
+            elif c_l-2>ln:
+                self.setColumnCount(ln+2)
+                
+                
+
+    @traceback_erors
+    def setRelativeState(self, trig):
+        
+        if trig != self.typeDelegate["relative"]:
+            
+            if trig:
+                for i in range(1,self.rowCount()):
+                    t = float(self.item(i,1).text()) if self.item(i,1).text()!='' else None
+                    if t is not None:
+                        for j in range(2,self.columnCount()):
+                            if self.item(i,j).text()!='':
+                                self.item(i,j).setText(str(round(t-float(self.item(i,j).text()),3)))
+                
+            else:
+                
+                for i in range(1,self.rowCount()):
+                    t = float(self.item(i,1).text()) if self.item(i,1).text()!='' else None
+                    for j in range(2,self.columnCount()):
+                        if t is not None and self.item(i,j).text()!='':
+                            num = round(t-float(self.item(i,j).text()),3)
+                            self.item(i,j).setText(str(0 if num<0 else num))
+                        elif t is None and self.item(i,j).text()!='':
+                            num = float(self.item(i,j).text())
+                            self.item(i,j).setText(str(0 if num<0 else num))
+
+            self.typeDelegate["relative"] = not self.typeDelegate["relative"]
+
+
+    def clear_table(self):
+        for _ in range(self.rowCount()):
+            self.remove_row()
+
+    @traceback_erors
+    def write_table(self,key,rpa_info):
+        self.clear_table()
+        I_yst, t_yst = rpa_info[key]["rpa_I_setting"], rpa_info[key]["rpa_time_setting"]
+        for i, (I,t) in enumerate(zip(I_yst, t_yst)):
+            self.add_row()
+            self.item(i+1,0).setText(str("" if I is None else I))
+            self.item(i+1,1).setText(str("" if t is None else t))
+
+        self.setColumn(rpa_info[key]["arc_times"])
+
+        arc = zip(range(2,rpa_info[key]["arc_times"]+2),rpa_info[key]["arc_setting"],rpa_info[key]["arc_pause"])
+
+        for j, current_arc, pause in arc:
+            self.item(0,j).setText(str("" if pause is None else pause))
+            for i, t_arc in enumerate(current_arc):
+                self.item(i+1,j).setText(str("" if t_arc is None else t_arc))
+           
+    @traceback_erors    
+    def read_table(self):
+        I_yst, t_yst, T_arc, T_pause = [], [], [],[]
+        for i in range(1,self.rowCount()):
+            I_yst.append(float(self.item(i,0).text()) if self.item(i,0).text()!='' else None)
+            t_yst.append(float(self.item(i,1).text()) if self.item(i,1).text()!='' else None)
+
+        for j in range(2,self.columnCount()):
+            T_arc.append([])
+            T_pause.append(float(self.item(0,j).text()) if self.item(0,j).text()!='' else None)
+            for i in range(1,self.rowCount()):
+                T_arc[j-2].append(float(self.item(i,j).text()) if self.item(i,j).text()!='' else None)
+          
+        return {"rpa_I_setting":I_yst,"rpa_time_setting":t_yst,"arc_setting":T_arc,"arc_pause":T_pause,"arc_times":len(T_arc)}
+        
+        
+
+
+class ShortCircuitLineTable(QTableWidget):
+    def __init__(self,parent=None):
+        super().__init__(parent)
+
+        self.setColumnCount(2)
+        self.setHorizontalHeaderLabels(["Iкз, кА","L, км"])
+        #self.setColumnWidth(0,140)
+        self.PlotDataFunc = None
+
+        self.setItemDelegate(DownloadDelegate("SCLine"))
+
+    def setPlotDataFunc(self,func):
+        self.PlotDataFunc = func
+
+    #@traceback_erors
+    def closeEditor(self, editor, hint):
+        data = self.read_table(own=True)
+        self.setColorMistakes(data['I_sc'], data['L_sc'])
+
+        if self.PlotDataFunc is not None:
+            self.PlotDataFunc(data)
+        
+        QTableWidget.closeEditor(self, editor, hint)
+        
+
+    @traceback_erors
+    def add_row(self):
+        ind = self.currentRow()+1 if self.currentRow() != -1 else self.rowCount()
+        self.insertRow(ind)
+
+        self.setItem(ind,0, CustomTableWidgetItem(""))
+        self.setItem(ind,1, CustomTableWidgetItem(""))
+        
+        self.selectionModel().clearSelection()
+        self.setCurrentCell(-1,-1)
+        
+        
+    @traceback_erors  
+    def remove_row(self):
+        if self.rowCount()>0:
+            ind = self.currentRow() if self.currentRow() != -1 else self.rowCount()-1
+
+            self.removeRow(ind)
+            self.selectionModel().clearSelection()
+            self.setCurrentCell(-1,-1)
+
+    def clear_table(self):
+        for _ in range(self.rowCount()):
+            self.remove_row()
+
+    @traceback_erors
+    def write_table(self,key,rpa_info):
+        self.clear_table()
+        I_sc, L_sc = rpa_info[key]["I_sc"], rpa_info[key]["L_sc"]
+        for i, (I,L) in enumerate(zip(I_sc, L_sc)):
+            self.add_row()
+            self.item(i,0).setText(str("" if I is None else I))
+            self.item(i,1).setText(str("" if L is None else L))
+            
+
+    @traceback_erors   
+    def read_table(self, own=False):
+        I_sc, L_sc = [], []
+        for i in range(self.rowCount()):
+            if self.item(i,0).text()!="" and self.item(i,1).text():
+                I_sc.append(float(self.item(i,0).text()))
+                L_sc.append(float(self.item(i,1).text()))
+            elif own:
+                I_sc.append(None)
+                L_sc.append(None)
+          
+        return {"I_sc":I_sc,"L_sc":L_sc}
+
+    @traceback_erors
+    def setColorMistakes(self, I_sc, L_sc):
+        rows = self.rowCount()
+        if rows <= 2:
+            for i in range(2):
+                if I_sc[i] is None:
+                    self.item(i,0).setBackground(QColor(255,0,0,100))
+                else:
+                    self.item(i,0).setBackground(QColor(255,255,255))
+
+                if L_sc[i] is None:
+                    self.item(i,1).setBackground(QColor(255,0,0,100))
+                else:
+                    self.item(i,1).setBackground(QColor(255,255,255))
+        elif rows >= 3:
+            a = [j for j in I_sc if j is not None][:2]
+            b = [j for j in L_sc if j is not None][:2]
+
+            d1 = a[1]>a[0] if len(a)==2 else None
+            d2 = b[1]>b[0] if len(b)==2 else None
+
+            c1 = (-float('inf') if d1 else float('inf')) if d1 is not None else None
+            c2 = (-float('inf') if d2 else float('inf')) if d2 is not None else None
+
+            
+            for i in range(rows):
+                if I_sc[i] is None:
+                    self.item(i,0).setBackground(QColor(255,0,0,100))
+                elif d1 is not None:
+                    if (d1 and I_sc[i]>c1) or (not d1 and I_sc[i]<c1):
+                        c1 = I_sc[i]
+                        self.item(i,0).setBackground(QColor(255,255,255))
+                    else:
+                        self.item(i,0).setBackground(QColor(255,0,0,100))
+                else:
+                    self.item(i,0).setBackground(QColor(255,255,255))
+
+                if L_sc[i] is None:
+                    self.item(i,1).setBackground(QColor(255,0,0,100))
+                elif d2 is not None:
+                    if (d2 and L_sc[i]>c2) or (not d2 and L_sc[i]<c2):
+                        c2 = L_sc[i]
+                        self.item(i,1).setBackground(QColor(255,255,255))
+                    else:
+                        self.item(i,1).setBackground(QColor(255,0,0,100))
+                else:
+                    self.item(i,1).setBackground(QColor(255,255,255))
+
+
+
+
 class LineEditManager():
     def __init__(self,tab):
         self.children_set = set()
@@ -1755,7 +2036,7 @@ class LineEditManager():
 
             self.editChildren()
         
-
+    @traceback_erors
     def remove_lineEdit(self, obj):
         if obj in self.line_edit_objs:
             self.unique_set.discard(obj.text().strip())

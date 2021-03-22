@@ -4,7 +4,7 @@
 from PyQt5.QtWidgets import QApplication,QMainWindow,QWidget,QVBoxLayout,QHBoxLayout,QLabel,\
     QScrollArea,QSizePolicy, QTableWidgetItem,QSplitter, QFrame, QSizePolicy, QListView, QTableWidget, qApp, QAction,\
      QMessageBox,QFileDialog, QErrorMessage, QDoubleSpinBox, QSpacerItem, QLineEdit, QItemDelegate, QProgressBar,\
-     QTabWidget, QComboBox
+     QTabWidget, QComboBox, QGridLayout, QCheckBox, QSpinBox, QDoubleSpinBox, QSpacerItem
 from PyQt5.QtGui import QPixmap, QPalette, QBrush, QImage, QIcon, QTransform, QStandardItemModel,QStandardItem,\
      QDoubleValidator, QValidator, QCloseEvent, QColor
 from PyQt5.QtCore import QPersistentModelIndex, Qt,  QSize, QModelIndex, QThread, pyqtSignal, QTimer
@@ -13,11 +13,16 @@ import sys
 import os
 
 from table_classes import traceback_erors, OkgtSectorTable, OkgtSingleTable, PSTable, NodeTable, LineEditManager,\
-    VlParamsTable, VlSectorTable, VlPsParamsTable, VlCommonChainsTable
+    VlParamsTable, VlSectorTable, VlPsParamsTable, VlCommonChainsTable, RPASettingsTable, ShortCircuitLineTable, UserComboBox
+
+
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
+import matplotlib.pyplot as plt
 
 from calc_okgt import k_supports, k_conductors, main_calc
 
-from initial_data import okgt_info, vl_info, ps_info, rpa_info
+from initial_data2 import okgt_info, vl_info, ps_info, rpa_info
 
    
     
@@ -53,13 +58,13 @@ class MyWindow(QMainWindow):
         self.Okgt_Widget = QWidget()
         self.Vl_Tabs = QTabWidget()
         self.Ps_Widget = QWidget()
-        Rpa_Tabs = QTabWidget()
+        self.Rpa_Tabs = QTabWidget()
         Rez_Tabs = QTabWidget()
 
         self.mainTabWidget.addTab(self.Okgt_Widget,"ОКГТ")
         self.mainTabWidget.addTab(self.Ps_Widget,"ПС")
         self.mainTabWidget.addTab(self.Vl_Tabs,"ВЛ")
-        self.mainTabWidget.addTab(Rpa_Tabs,"РЗА")
+        self.mainTabWidget.addTab(self.Rpa_Tabs,"РЗА")
         self.mainTabWidget.addTab(Rez_Tabs,"Результаты")
 
 
@@ -74,6 +79,7 @@ class MyWindow(QMainWindow):
 
         self.le_manager = LineEditManager(self.Vl_Tabs)
         self.vl_liks = {}
+        self.rpa_liks = {}
         self.vl_settings_dict = {
             "conductors":"Провода","phases":"Фазировка","supports":"Опоры","groundwires":"Грозотросы",\
             "PSs":"ПС","grounded":"Заземление проводов","countercables":"Противовес","commonchains":"Смежные цепи",
@@ -194,6 +200,12 @@ class MyWindow(QMainWindow):
                 wd = self.Vl_Tabs.widget(ind)
                 data = self.vl_liks[wd]
                 data["branches"].add_row()
+        elif ind == 3:
+            ind = self.Rpa_Tabs.currentIndex()
+            if ind>-1:
+                wd = self.Rpa_Tabs.widget(ind)
+                data = self.rpa_liks[wd]
+                data['rpa_settings'].add_row()
         
 
     def AddSector(self):
@@ -206,6 +218,12 @@ class MyWindow(QMainWindow):
                 wd = self.Vl_Tabs.widget(ind)
                 data = self.vl_liks[wd]
                 data["sector"].add_row()
+        elif ind == 3:
+            ind = self.Rpa_Tabs.currentIndex()
+            if ind>-1:
+                wd = self.Rpa_Tabs.widget(ind)
+                data = self.rpa_liks[wd]
+                data['sc_table'].add_row()
         
 
     def AddParams(self):
@@ -234,6 +252,13 @@ class MyWindow(QMainWindow):
                 wd = self.Vl_Tabs.widget(ind)
                 data = self.vl_liks[wd]
                 data["branches"].remove_row()
+
+        elif ind == 3:
+            ind = self.Rpa_Tabs.currentIndex()
+            if ind>-1:
+                wd = self.Rpa_Tabs.widget(ind)
+                data = self.rpa_liks[wd]
+                data['rpa_settings'].remove_row()
         
 
     def RemoveSector(self):
@@ -246,6 +271,12 @@ class MyWindow(QMainWindow):
                 wd = self.Vl_Tabs.widget(ind)
                 data = self.vl_liks[wd]
                 data["sector"].remove_row()
+        elif ind == 3:
+            ind = self.Rpa_Tabs.currentIndex()
+            if ind>-1:
+                wd = self.Rpa_Tabs.widget(ind)
+                data = self.rpa_liks[wd]
+                data['sc_table'].removed_row()
         
 
     def RemoveParams(self):
@@ -280,6 +311,13 @@ class MyWindow(QMainWindow):
                 data["sector"].clear_table()
                 for table in data["params"].values():
                     table.clear_table()
+        elif ind == 3:
+            ind = self.Rpa_Tabs.currentIndex()
+            if ind>-1:
+                wd = self.Rpa_Tabs.widget(ind)
+                data = self.rpa_liks[wd]
+                data['rpa_settings'].clear_table()
+                data['sc_table'].clear_table()
 
 
     def AddTab(self):
@@ -288,15 +326,16 @@ class MyWindow(QMainWindow):
             print("Add VL")
             self.add_vl_tab()
         elif ind == 3:
-            
             print("Add RPA")
+            self.add_rpa_tab()
 
     def RemoveTab(self):
         ind = self.mainTabWidget.currentIndex()
         if ind == 2:
-            print("Remove VL")
             self.remove_vl_tab()
+            print("Remove VL")
         elif ind == 3:
+            self.remove_rpa_tab()
             print("Remove RPA")
         
 
@@ -391,11 +430,190 @@ class MyWindow(QMainWindow):
     def remove_vl_tab(self, s_int=None):
         ind = self.Vl_Tabs.currentIndex() if s_int is None else s_int
         if ind>-1:
+            if s_int is None:
+                Message = QMessageBox(QMessageBox.Question,  'Удаление вкладки ВЛ',
+                    f"Вы дейстивлеьно хотите удалить вкладку {self.Vl_Tabs.tabText(ind)}?", parent=self)
+                Message.addButton('Да', QMessageBox.YesRole)
+                Message.addButton('Нет', QMessageBox.NoRole)
+                #Message.addButton('Сохранить', QMessageBox.ActionRole)
+                reply = Message.exec()
+                if reply == 1:
+                    return  
+
             wd = self.Vl_Tabs.widget(ind)
             data = self.vl_liks[wd]
+
+            data["params"]["commonchains"].clear_table()
+            for dtt in self.vl_liks.values():
+                dtt["params"]["commonchains"].vlComboEventResolution = False
+            
             self.le_manager.remove_lineEdit(data["line"])
             self.Vl_Tabs.removeTab(ind)
+            
             del self.vl_liks[wd]
+
+            for dtt in self.vl_liks.values():
+                dtt["params"]["commonchains"].vlComboEventResolution = True
+            
+
+    def add_rpa_tab(self):
+        vl_combo = UserComboBox(self.cntr_pr)
+        self.le_manager.add_child(vl_combo)
+        
+
+        ps_combo = UserComboBox(self.cntr_pr)
+        self.Ps_table.add_child(((0,),),ps_combo)
+
+        check = QCheckBox('')
+        check.setCheckState(Qt.Checked)
+        
+        t_auto = QDoubleSpinBox()
+        t_auto.setMinimum(0)
+        t_auto.setDecimals(3)
+        t_auto.setSingleStep(0.01)
+        t_auto.setValue(0.02)
+
+        t_switch = QDoubleSpinBox()
+        t_switch.setMinimum(0)
+        t_switch.setDecimals(3)
+        t_switch.setSingleStep(0.01)
+        t_switch.setValue(0.13)
+        
+        arc_times = QSpinBox()
+        arc_times.setMinimum(0)
+        arc_times.setSingleStep(1)
+        arc_times.setValue(0)
+        #arc_times.editingFinished.connect()
+        #arc_times.valueChanged.connect()
+
+        rpa_settings = RPASettingsTable()
+        check.stateChanged.connect(lambda x: rpa_settings.setRelativeState(True if x==Qt.Checked else False))
+        arc_times.valueChanged.connect(rpa_settings.setColumn)
+
+        sc_table = ShortCircuitLineTable()
+        sc_table.setMaximumWidth(240)
+        
+
+        settingsGrid = QGridLayout()
+        settingsGrid.addWidget(QLabel('ВЛ:'), 0,0)
+        settingsGrid.addWidget(QLabel('ПС:'), 1,0)
+        settingsGrid.addWidget(check, 2,0)
+
+        settingsGrid.addWidget(vl_combo, 0,1)
+        settingsGrid.addWidget(ps_combo, 1,1)
+        settingsGrid.addWidget(QLabel('Относительно времени уставки'), 2,1)
+
+        settingsGrid.addWidget(QLabel('Время автоматики:'), 0,2)
+        settingsGrid.addWidget(QLabel('Время выключателя:'), 1,2)
+        settingsGrid.addWidget(QLabel('Работа АПВ, раз:'), 2,2)
+
+        settingsGrid.addWidget(t_auto, 0,3)
+        settingsGrid.addWidget(t_switch, 1,3)
+        settingsGrid.addWidget(arc_times, 2,3)
+
+        settingsGrid.addItem(QSpacerItem(100,0, QSizePolicy.Expanding, QSizePolicy.Fixed),0,4)
+        settingsGrid.addItem(QSpacerItem(100,0, QSizePolicy.Expanding, QSizePolicy.Fixed),1,4)
+        settingsGrid.addItem(QSpacerItem(100,0, QSizePolicy.Expanding, QSizePolicy.Fixed),2,4)
+
+
+        Vlayout = QVBoxLayout()
+        Vlayout.addLayout(settingsGrid)
+        Vlayout.addWidget(rpa_settings)
+
+        top_widget = QWidget()
+        top_widget.setLayout(Vlayout)
+
+        fg = plt.figure(dpi=75) # Создаём фигуру графика 
+        fg_widget = FigureCanvas(fg) # Помещаем фигуру в контейнер
+        ax = fg.add_subplot(111) #
+        ax.set_xlabel('L, км') 
+        ax.set_ylabel('Iкз, кА')
+        ax.set_title("Кривая тока КЗ")
+        ax.grid(True)
+        
+
+        rpa_spltV = QSplitter(Qt.Vertical)
+        rpa_spltV.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        rpa_spltV.addWidget(top_widget)
+        rpa_spltV.addWidget(fg_widget)
+        rpa_spltV.setStretchFactor(1, 2) 
+        
+        rpa_spltH = QSplitter(Qt.Horizontal)
+        rpa_spltH.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        rpa_spltH.addWidget(rpa_spltV)
+        rpa_spltH.addWidget(sc_table)
+        rpa_spltH.setStretchFactor(6, 1)
+        
+        ind = self.Rpa_Tabs.addTab(rpa_spltH, f"РЗА№{self.Rpa_Tabs.count()+1}")
+        self.Rpa_Tabs.setCurrentIndex(ind)
+
+        vl_combo.currentTextChanged.connect(lambda t, w=rpa_spltH:self.renameRPATab(t,w))
+        ps_combo.currentTextChanged.connect(lambda t, w=rpa_spltH:self.renameRPATab(t,w))
+        sc_table.setPlotDataFunc(lambda d,w=rpa_spltH:self.refreshFigure(w,d))
+        
+
+        self.rpa_liks[rpa_spltH] = {
+            'vl_combo':vl_combo,
+            'ps_combo':ps_combo,
+            't_switch':t_switch,
+            't_auto':t_auto,
+            'arc_times':arc_times,
+            'check':check,
+            'rpa_settings':rpa_settings,
+            'sc_table':sc_table,
+            'figure':fg,
+            'axis':ax,
+            'fg_widget':fg_widget,
+        }
+
+    def remove_rpa_tab(self, s_int=None):
+        ind = self.Rpa_Tabs.currentIndex() if s_int is None else s_int
+        if ind>-1:
+            if s_int is None:
+                Message = QMessageBox(QMessageBox.Question,  'Удаление вкладки РЗА',
+                    f"Вы дейстивлеьно хотите удалить вкладку {self.Rpa_Tabs.tabText(ind)}?", parent=self)
+                Message.addButton('Да', QMessageBox.YesRole)
+                Message.addButton('Нет', QMessageBox.NoRole)
+                #Message.addButton('Сохранить', QMessageBox.ActionRole)
+                reply = Message.exec()
+                if reply == 1:
+                    return  
+                
+            wd = self.Rpa_Tabs.widget(ind)
+            data = self.rpa_liks[wd]
+            self.le_manager.remove_child(data['vl_combo'])
+            self.Ps_table.remove_child(((0,),),data['ps_combo'])
+            data['vl_combo'].currentTextChanged.disconnect()
+            data['ps_combo'].currentTextChanged.disconnect()
+            data['check'].stateChanged.disconnect()
+            data['arc_times'].valueChanged.disconnect()
+            plt.close(data['figure'])
+
+            self.Rpa_Tabs.removeTab(ind)
+            del self.rpa_liks[wd]
+
+
+
+    def refreshFigure(self,widget,data):
+        I_sc, L_sc =  data['I_sc'], data['L_sc']
+        ax = self.rpa_liks[widget]['axis']
+        ax.clear()
+        ax.set_xlabel('L, км') 
+        ax.set_ylabel('Iкз, кА')
+        ax.set_title("Кривая тока КЗ")
+        ax.grid(True) 
+        ax.plot(I_sc,L_sc,'r')#,label=self.FAName
+        self.rpa_liks[widget]['fg_widget'].draw()
+        
+
+    def renameRPATab(self,_,widget):
+        ind = self.Rpa_Tabs.indexOf(widget)
+        vl_combo = self.rpa_liks[widget]['vl_combo']
+        ps_combo = self.rpa_liks[widget]['ps_combo']
+        self.Rpa_Tabs.setTabText(ind,vl_combo.currentText()+"-"+ps_combo.currentText())
+        
         
     #@traceback_erors 
     def OpenFile(self):
@@ -421,7 +639,21 @@ class MyWindow(QMainWindow):
         for ind, info in enumerate(vl_info.values()):
             data = self.vl_liks[self.Vl_Tabs.widget(ind)]
             data["params"]["commonchains"].write_table(info)
-         
+            #break
+
+        for ind, ((vl_name,ps_name),info) in enumerate(rpa_info.items()):
+            self.add_rpa_tab()
+            data = self.rpa_liks[self.Rpa_Tabs.widget(ind)]
+            data['vl_combo'].setCurrentText(vl_name)
+            data['ps_combo'].setCurrentText(ps_name)
+            data['t_switch'].setValue(info["Tswitch"])
+            data['t_auto'].setValue(info["Tautomation"])
+            data['arc_times'].setValue(info["arc_times"])
+            data['rpa_settings'].write_table((vl_name,ps_name),rpa_info)
+            data['sc_table'].write_table((vl_name,ps_name),rpa_info)
+
+            self.refreshFigure(self.Rpa_Tabs.widget(ind),data['sc_table'].read_table(own=True))
+
         
     #@traceback_erors
     def ReadTables(self):
