@@ -4,7 +4,7 @@
 from PyQt5.QtWidgets import QApplication,QMainWindow,QWidget,QVBoxLayout,QHBoxLayout,QLabel,\
     QScrollArea,QSizePolicy, QTableWidgetItem,QSplitter, QFrame, QSizePolicy, QListView, QTableWidget, qApp, QAction,\
      QMessageBox,QFileDialog, QErrorMessage, QDoubleSpinBox, QSpacerItem, QLineEdit, QItemDelegate, QProgressBar,\
-     QTabWidget, QComboBox, QGridLayout, QCheckBox, QSpinBox, QDoubleSpinBox, QSpacerItem
+     QTabWidget, QComboBox, QGridLayout, QCheckBox, QSpinBox, QDoubleSpinBox, QSpacerItem, QProgressDialog
 from PyQt5.QtGui import QPixmap, QPalette, QBrush, QImage, QIcon, QTransform, QStandardItemModel,QStandardItem,\
      QDoubleValidator, QValidator, QCloseEvent, QColor
 from PyQt5.QtCore import QPersistentModelIndex, Qt,  QSize, QModelIndex, QThread, pyqtSignal, QTimer
@@ -18,13 +18,62 @@ from table_classes import traceback_erors, OkgtSectorTable, OkgtSingleTable, PST
 
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
+from matplotlib.ticker import FuncFormatter
 import matplotlib.pyplot as plt
+
+import json
 
 from calc_okgt import k_supports, k_conductors, main_calc
 
 from initial_data2 import okgt_info, vl_info, ps_info, rpa_info
 
-   
+
+
+
+
+class OkgtCalcTread(QThread):
+    mysignal = pyqtSignal(str)
+    def __init__(self, parent=None):
+        QThread.__init__(self, parent)
+        self.okgt_info = None
+        self.vl_info = None
+        self.ps_info = None
+        self.rpa_info = None
+
+
+    def setData(self, okgt_info, vl_info, ps_info, rpa_info):
+        self.okgt_info = okgt_info
+        self.vl_info = vl_info
+        self.ps_info = ps_info
+        self.rpa_info = rpa_info
+        
+    def run(self):
+        self.mysignal.emit('start:')
+        try:
+            self.result = main_calc(self.okgt_info, self.vl_info, self.ps_info, self.rpa_info, callback=self.runningMesages)
+        except Exception as ex:
+            self.mysignal.emit(f'error:{ex}')
+        else:
+            self.mysignal.emit('end:')
+
+
+    def getData(self):
+        return self.result
+
+    def runningMesages(self,tp,adds):
+        if tp == "Calc equation system":
+            self.mysignal.emit('run_messages:Составляем систему уравнений')
+        elif tp == "Calc points":
+            addsn = (adds[0],adds[1],adds[2],f"{adds[3][0]}-{adds[3][1]}",adds[4])
+            self.mysignal.emit('run_points:{"current":"%s","length":"%s","vl_name":"%s","branch":"%s","support":"%s"}' % addsn)
+
+            
+    # остановка потока
+    def stop( self ):
+        
+        self.terminate()
+        self.wait()
+        return 'stop'
     
 
 class MyWindow(QMainWindow):
@@ -35,6 +84,22 @@ class MyWindow(QMainWindow):
             self.path_home = os.path.expanduser("~\\Desktop\\")
         except Exception:
             self.path_home = ""
+
+        last_path_keys = ['id_save_as','id_open']
+        try: 
+            with open('last_path.json', "r" ) as f:
+                self.path_dict = {i:j for i,j in json.load(f).items()}
+            
+        except Exception:
+            self.path_dict = {}
+        finally:
+            for path_key in last_path_keys:
+                if path_key not in self.path_dict:
+                    self.path_dict[path_key] = self.path_home
+
+        self.currentFilePath = ''
+        self.currentFileName = 'Новый файл'
+        self.setWindowTitle(f"OKGT - {self.currentFileName}")
 
         desktop = QApplication.desktop()
         wd = desktop.width()
@@ -59,13 +124,13 @@ class MyWindow(QMainWindow):
         self.Vl_Tabs = QTabWidget()
         self.Ps_Widget = QWidget()
         self.Rpa_Tabs = QTabWidget()
-        Rez_Tabs = QTabWidget()
+        self.Rez_Tabs = QTabWidget()
 
         self.mainTabWidget.addTab(self.Okgt_Widget,"ОКГТ")
         self.mainTabWidget.addTab(self.Ps_Widget,"ПС")
         self.mainTabWidget.addTab(self.Vl_Tabs,"ВЛ")
         self.mainTabWidget.addTab(self.Rpa_Tabs,"РЗА")
-        self.mainTabWidget.addTab(Rez_Tabs,"Результаты")
+        self.mainTabWidget.addTab(self.Rez_Tabs,"Результаты")
 
 
         self.cntr_pr = {"trig":False,"timer":QTimer()}
@@ -85,6 +150,14 @@ class MyWindow(QMainWindow):
             "PSs":"ПС","grounded":"Заземление проводов","countercables":"Противовес","commonchains":"Смежные цепи",
         }
         self.vl_settings_dict_rev = {v:k for k,v in self.vl_settings_dict.items()}
+
+        self.okgt_calc_tread = OkgtCalcTread()
+        self.okgt_calc_tread.mysignal.connect(self.OkgtCalculationSignals, Qt.QueuedConnection)
+        self.okgt_proces_dialog = None
+
+        self.resFig = {}
+        self.jsSpleater = "\n\u00C6\n"
+        self.font_s = 14
 
         
 
@@ -110,16 +183,22 @@ class MyWindow(QMainWindow):
         fileMenu = menubar.addMenu('&Файл')
 
         open_file = QAction( '&Открыть', self) #QIcon('exit.png'),
-        open_file.setShortcut('Ctrl+K')
-        open_file.setStatusTip('Открыть файл')
-        open_file.triggered.connect(self.OpenFile)
+        open_file.setShortcut('Ctrl+O')
+        open_file.setStatusTip('Открыть файл ИД')
+        open_file.triggered.connect(self.InitialDataOpen)
         fileMenu.addAction(open_file)
 
-        read_table = QAction( '&Прочитать таблицы', self) #QIcon('exit.png'),
-        read_table.setShortcut('Ctrl+L')
-        read_table.setStatusTip('Прочитать таблицы')
-        read_table.triggered.connect(self.ReadTables)
-        fileMenu.addAction(read_table)
+        id_save = QAction( '&Сохранить', self) #QIcon('exit.png'),
+        id_save.setShortcut("Ctrl+Shift+S")
+        id_save.setStatusTip('Сохранить исходные данные в текущий файл')
+        id_save.triggered.connect(self.InitialDataSave)
+        fileMenu.addAction(id_save)
+
+        id_save_as = QAction( '&Сохранить как', self) #QIcon('exit.png'),
+        id_save_as.setShortcut('Ctrl+P')
+        id_save_as.setStatusTip('Сохранить исходные данные в новый файл')
+        id_save_as.triggered.connect(self.InitialDataSaveAs)
+        fileMenu.addAction(id_save_as)
 
         exitAction = QAction( '&Выход', self) #QIcon('exit.png'),
         exitAction.setShortcut('Esc')
@@ -128,7 +207,7 @@ class MyWindow(QMainWindow):
         fileMenu.addAction(exitAction)
       
     
-
+        
         editMenu = menubar.addMenu('&Правка')
 
 
@@ -186,6 +265,14 @@ class MyWindow(QMainWindow):
         clear_tab.triggered.connect(self.ClearTab)
         editMenu.addAction(clear_tab)
 
+
+        calcMenu = menubar.addMenu('&Расчёт')
+
+        run_calc = QAction( '&Расчёт ОКГТ', self) #QIcon('exit.png'),
+        run_calc.setShortcut("Ctrl+R")
+        run_calc.setStatusTip('Запустить расчёт ОКГТ')
+        run_calc.triggered.connect(self.RunCalculation)
+        calcMenu.addAction(run_calc)
 
 
     def AddBranch(self):
@@ -291,33 +378,48 @@ class MyWindow(QMainWindow):
                 p_ind = data["params_tab"].currentIndex()
                 header_t = data["params_tab"].tabText(p_ind)
                 data["params"][self.vl_settings_dict_rev[header_t]].remove_row()
+
+
+    def ShowMessage(self, text):
+        Message = QMessageBox(QMessageBox.Question,  f'Удаление вкладки {text}',
+                    f"Вы дейстивлеьно хотите удалить вкладку {text}?", parent=self)
+        Message.addButton('Да', QMessageBox.YesRole)
+        Message.addButton('Нет', QMessageBox.NoRole)
+        #Message.addButton('Сохранить', QMessageBox.ActionRole)
+        reply = Message.exec()
+        return reply == 0
+
         
 
     def ClearTab(self):
         ind = self.mainTabWidget.currentIndex()
         if ind == 0:
-            self.Okgt_node_table.clear_table()
-            self.Okgt_sector_table.clear_table()
-            self.Okgt_single_table.clear_table()
+            if self.ShowMessage(self.mainTabWidget.tabText(ind)):
+                self.Okgt_node_table.clear_table()
+                self.Okgt_sector_table.clear_table()
+                self.Okgt_single_table.clear_table()
             
         elif ind == 1:
-            self.Ps_table.clear_table()
+            if self.ShowMessage(self.mainTabWidget.tabText(ind)):
+                self.Ps_table.clear_table()
         elif ind == 2:
             ind = self.Vl_Tabs.currentIndex()
             if ind>-1:
-                wd = self.Vl_Tabs.widget(ind)
-                data = self.vl_liks[wd]
-                data["branches"].clear_table()
-                data["sector"].clear_table()
-                for table in data["params"].values():
-                    table.clear_table()
+                if self.ShowMessage(self.mainTabWidget.tabText(ind)):
+                    wd = self.Vl_Tabs.widget(ind)
+                    data = self.vl_liks[wd]
+                    data["branches"].clear_table()
+                    data["sector"].clear_table()
+                    for table in data["params"].values():
+                        table.clear_table()
         elif ind == 3:
             ind = self.Rpa_Tabs.currentIndex()
             if ind>-1:
-                wd = self.Rpa_Tabs.widget(ind)
-                data = self.rpa_liks[wd]
-                data['rpa_settings'].clear_table()
-                data['sc_table'].clear_table()
+                if self.ShowMessage(self.mainTabWidget.tabText(ind)):
+                    wd = self.Rpa_Tabs.widget(ind)
+                    data = self.rpa_liks[wd]
+                    data['rpa_settings'].clear_table()
+                    data['sc_table'].clear_table()
 
 
     def AddTab(self):
@@ -415,7 +517,6 @@ class MyWindow(QMainWindow):
         self.le_manager.add_lineEdit(line,vl_spltV)
         name = self.le_manager.get_unique_name("ВЛ № ")
         line.setText(name)
-        #setTabText
         self.Vl_Tabs.setCurrentIndex(ind)
 
         self.vl_liks[vl_spltV] = {
@@ -484,7 +585,6 @@ class MyWindow(QMainWindow):
         arc_times.setSingleStep(1)
         arc_times.setValue(0)
         #arc_times.editingFinished.connect()
-        #arc_times.valueChanged.connect()
 
         rpa_settings = RPASettingsTable()
         check.stateChanged.connect(lambda x: rpa_settings.setRelativeState(True if x==Qt.Checked else False))
@@ -526,10 +626,12 @@ class MyWindow(QMainWindow):
         fg = plt.figure(dpi=75) # Создаём фигуру графика 
         fg_widget = FigureCanvas(fg) # Помещаем фигуру в контейнер
         ax = fg.add_subplot(111) #
-        ax.set_xlabel('L, км') 
-        ax.set_ylabel('Iкз, кА')
-        ax.set_title("Кривая тока КЗ")
+        ax.set_xlabel('L, км',fontsize=self.font_s) 
+        ax.set_ylabel('Iкз, кА',fontsize=self.font_s)
+        ax.set_title("Кривая тока КЗ",fontsize=self.font_s)
+        ax.tick_params(labelsize=self.font_s)
         ax.grid(True)
+        
         
 
         rpa_spltV = QSplitter(Qt.Vertical)
@@ -568,6 +670,8 @@ class MyWindow(QMainWindow):
             'fg_widget':fg_widget,
         }
 
+        self.activateWindow()
+
     def remove_rpa_tab(self, s_int=None):
         ind = self.Rpa_Tabs.currentIndex() if s_int is None else s_int
         if ind>-1:
@@ -600,11 +704,17 @@ class MyWindow(QMainWindow):
         I_sc, L_sc =  data['I_sc'], data['L_sc']
         ax = self.rpa_liks[widget]['axis']
         ax.clear()
-        ax.set_xlabel('L, км') 
-        ax.set_ylabel('Iкз, кА')
-        ax.set_title("Кривая тока КЗ")
+        ax.set_xlabel('L, км',fontsize=self.font_s) 
+        ax.set_ylabel('Iкз, кА',fontsize=self.font_s)
+        ax.set_title("Кривая тока КЗ",fontsize=self.font_s)
+        ax.tick_params(labelsize=self.font_s)
         ax.grid(True) 
-        ax.plot(I_sc,L_sc,'r')#,label=self.FAName
+        ax.plot(L_sc,I_sc,'r')#,label=self.FAName
+        
+        #axes.set_xlim([xmin,xmax])
+        
+        xloc = plt.MaxNLocator()
+        ax.xaxis.set_major_locator(xloc)
         self.rpa_liks[widget]['fg_widget'].draw()
         
 
@@ -613,10 +723,154 @@ class MyWindow(QMainWindow):
         vl_combo = self.rpa_liks[widget]['vl_combo']
         ps_combo = self.rpa_liks[widget]['ps_combo']
         self.Rpa_Tabs.setTabText(ind,vl_combo.currentText()+"-"+ps_combo.currentText())
+
+    
+    def RunCalculation(self):
+        
+        okgt_info_new, ps_info_new, vl_info_new,  rpa_info_new = self.ReadTables()
+        self.okgt_calc_tread.setData(okgt_info_new, vl_info_new, ps_info_new, rpa_info_new)
+
+        if not self.okgt_calc_tread.isRunning():
+            self.OkgtCalculationSignals("init:")
+            self.okgt_calc_tread.start()
+        
+    @traceback_erors
+    def OkgtCalculationSignals(self,signal):
+        if signal == "init:":
+            self.okgt_proces_dialog = QProgressDialog("Иницализация расчёта",'Отмена', 0, 0, self)
+            self.okgt_proces_dialog.setWindowTitle('Расчет ОКГТ')
+            self.okgt_proces_dialog.setMinimumDuration(0)
+            self.okgt_proces_dialog.setWindowModality(Qt.WindowModal)
+            self.okgt_proces_dialog.canceled.connect(self.okgt_calc_tread.stop)
+            self.okgt_proces_dialog.show()
+        elif signal == "start:":
+            self.okgt_proces_dialog.setLabelText("Запуск расчёта")
+        elif signal.startswith("run_messages:"):
+            self.okgt_proces_dialog.setLabelText(signal[len("run_messages:"):]) 
+        elif signal.startswith("run_points:"):
+            data = json.loads(signal[len("run_points:"):])
+            mes = f"ВЛ: {data['vl_name']}, ветвь: {data['branch']}, опора: {data['support']}, {data['current']} из {data['length']}"
+            self.okgt_proces_dialog.setLabelText(mes) 
+            if self.okgt_proces_dialog.maximum() != int(data['length']):
+                self.okgt_proces_dialog.setMaximum(int(data['length']))
+            self.okgt_proces_dialog.setValue(int(data['current']))
+        elif signal.startswith("error:"): 
+            self.okgt_proces_dialog.close()
+            ems = QErrorMessage(self)
+            self.okgt_proces_dialog.canceled.disconnect()
+            self.okgt_proces_dialog = None
+            ems.setWindowTitle('Возникла ошибка')
+            ems.showMessage('В исходных данных допущена ошибка. Проверте исходные данные. ('+signal[len("error:"):]+')')
+        elif signal == "end:":
+            self.okgt_proces_dialog.close()
+            self.okgt_proces_dialog.canceled.disconnect()
+            self.okgt_proces_dialog = None
+            print("calc is end")
+            self.setResultsPlots()
+
+    def setResultsPlots(self):
+        for ind in range(self.Rez_Tabs.count()-1,-1,-1):
+            wd = self.Rez_Tabs.widget(ind)
+            if wd in self.resFig:
+                plt.close(self.resFig[wd][0])
+                del self.resFig[wd]
+            self.Rez_Tabs.removeTab(ind)
+        results = self.okgt_calc_tread.getData()
+        for (n,k), val in results.items():
+
+            fg = plt.figure(dpi=75) # Создаём фигуру графика 
+            fg_widget = FigureCanvas(fg) # Помещаем фигуру в контейнер
+            ax = fg.add_subplot(111) #
+            ax.plot(val["L"],val["B"],'r',label="Bрасч.")
+            ax.plot(val["L"],val["Bmax"],'b',label="Вмах")
+            ax.set_xlabel('L, км',fontsize=self.font_s) 
+            ax.set_ylabel('B, кА^2*c',fontsize=self.font_s)
+            ax.set_title(f"{n} - {k}",fontsize=self.font_s)
+            ax.tick_params(labelsize=self.font_s)
+            ax.set_xlim([val["L"][0],val["L"][-1]])
+            ax.grid(True)
+
+            self.Rez_Tabs.addTab(fg_widget, f"{n} - {k}")
+
+            self.resFig[fg_widget] = (fg,ax)
+
+        self.mainTabWidget.setCurrentIndex(4)
+
+    #@traceback_erors 
+    def ToJsonFormat(self,okgt_info,ps_info,vl_info,rpa_info):
+        def ReadData(file):
+            if type(file) == dict:
+                new_file = {}
+                for key, val in file.items():
+                    nkey = self.jsSpleater.join(key) if type(key) == tuple else key
+                    if type(val) == tuple:
+                        nval = self.jsSpleater.join(val)
+                    elif type(val) == dict or type(val) == list:
+                        nval = ReadData(val)
+                    else:
+                        nval = val
+                    new_file[nkey] = nval
+                return new_file
+
+            elif type(file) == list:
+                new_file = []
+                for val in file:
+                    if type(val) == tuple:
+                        nval = self.jsSpleater.join(val)
+                    elif type(val) == dict or type(val) == list:
+                        nval = ReadData(val)
+                    else:
+                        nval = val
+                    new_file.append(nval)
+                return new_file
+
+        okgt_info_new = ReadData(okgt_info)
+        ps_info_new = ReadData(ps_info)
+        vl_info_new = ReadData(vl_info)
+        rpa_info_new = ReadData(rpa_info)
+        
+
+        return okgt_info_new,ps_info_new,vl_info_new,rpa_info_new
+
+
+    #@traceback_erors
+    def FromJsonFormat(self,okgt_info,ps_info,vl_info,rpa_info):
+        def ReadData(file):
+            if type(file) == dict:
+                new_file = {}
+                for key, val in file.items(): 
+                    nkey = tuple(key.split(self.jsSpleater)) if key.find(self.jsSpleater)!=-1 else key
+                    if type(val) == str:
+                        nval = tuple(val.split(self.jsSpleater)) if val.find(self.jsSpleater)!=-1 else val
+                    elif type(val) == dict or type(val) == list:
+                        nval = ReadData(val)
+                    else:
+                        nval = val
+                    new_file[nkey] = nval
+                return new_file
+
+            elif type(file) == list:
+                new_file = []
+                for val in file: 
+                    if type(val) == str:
+                        nval = tuple(val.split(self.jsSpleater)) if val.find(self.jsSpleater)!=-1 else val
+                    elif type(val) == dict or type(val) == list:
+                        nval = ReadData(val)
+                    else:
+                        nval = val
+                    new_file.append(nval)
+                return new_file
+
+        okgt_info_new = ReadData(okgt_info)
+        ps_info_new = ReadData(ps_info)
+        vl_info_new = ReadData(vl_info)
+        rpa_info_new = ReadData(rpa_info)
+
+        return okgt_info_new,ps_info_new,vl_info_new,rpa_info_new
         
         
     #@traceback_erors 
-    def OpenFile(self):
+    def WriteTables(self,okgt_info,ps_info,vl_info,rpa_info):
         self.Okgt_node_table.write_table(okgt_info)
         self.Okgt_sector_table.write_table(okgt_info)
         self.Okgt_single_table.write_table(okgt_info)
@@ -639,7 +893,10 @@ class MyWindow(QMainWindow):
         for ind, info in enumerate(vl_info.values()):
             data = self.vl_liks[self.Vl_Tabs.widget(ind)]
             data["params"]["commonchains"].write_table(info)
-            #break
+            
+
+        for ind in range(self.Rpa_Tabs.count()-1,-1,-1):
+            self.remove_rpa_tab(ind)
 
         for ind, ((vl_name,ps_name),info) in enumerate(rpa_info.items()):
             self.add_rpa_tab()
@@ -654,22 +911,21 @@ class MyWindow(QMainWindow):
 
             self.refreshFigure(self.Rpa_Tabs.widget(ind),data['sc_table'].read_table(own=True))
 
+        self.activateWindow()
+
         
     #@traceback_erors
     def ReadTables(self):
-        
-        global okgt_info, ps_info, vl_info
         lst = self.Okgt_node_table.read_table()
         dct = self.Okgt_sector_table.read_table(lst)
-        okgt_info = self.Okgt_single_table.read_table(dct)
-        ps_info = self.Ps_table.read_table()
-        #print(okgt_info_new)
+        okgt_info_new = self.Okgt_single_table.read_table(dct)
+        ps_info_new = self.Ps_table.read_table()
 
         d_lst = {}
         d_com_tables = {}
         vl_info_new = {}
         for data in self.vl_liks.values():
-            name = data['line'].text()
+            name = data['line'].text().strip()
             br_lst = data["branches"].read_table()
             d_lst[name] = br_lst
             d_com_tables[name] = data["params"]["commonchains"]
@@ -684,10 +940,101 @@ class MyWindow(QMainWindow):
         for name, table in d_com_tables.items():
             vl_info_new[name].update([(key,val) for key,val in table.read_table(name,d_lst).items()])
 
-        vl_info = vl_info_new
+        #vl_info = vl_info_new
+
+    
+        rpa_info_new = {}
+        for data in self.rpa_liks.values():
+            vl_name = data['vl_combo'].currentText()
+            ps_name = data['ps_combo'].currentText()
+
+            if vl_name!='Нет' and ps_name!='Нет':
+                d1 = data['rpa_settings'].read_table()
+                d2 = data['sc_table'].read_table()
+                
+                rpa_info_new[(vl_name,ps_name)] ={
+                    "Tswitch":data['t_switch'].value(),
+                    "Tautomation":data['t_auto'].value(),
+                    "arc_times":data['arc_times'].value(),
+                    **d1,
+                    **d2,
+                }
+
+        
+        return okgt_info_new, ps_info_new, vl_info_new, rpa_info_new
+
+    def InitialDataOpen(self):
+        try:
+            fname = QFileDialog.getOpenFileName(self, 'Открыть файл ИД', self.path_dict['id_open'],'*.okgt')
+            if fname[0] == "" and  fname[1] == "": return
+            fname = fname[0]
+
+            self.path_dict['id_open'] = os.path.dirname(fname)
+            self.currentFilePath = fname
+            self.currentFileName = os.path.splitext(os.path.split(fname)[1])[0]
+            self.setWindowTitle(f"OKGT - {self.currentFileName}")
+
+            with open(fname, "r", encoding="utf8") as f:
+                data  = json.load(f)
+
+            #print(self.FromJsonFormat(**data))
+            self.WriteTables(*self.FromJsonFormat(**data))
+            
+
+        except Exception as ex:
+            ems = QErrorMessage(self)
+            ems.setWindowTitle('Возникла ошибка')
+            ems.showMessage('Не получилось открыть файл. '+
+                            'Вероятнее всего файл поврежден'+str(ex))
+
+    def InitialDataSave(self):
+        try:
+            if os.path.exists(self.currentFilePath):
+                fname = self.currentFilePath
+                okgt_info, ps_info, vl_info, rpa_info = self.ToJsonFormat(*self.ReadTables())
+
+                data = {'okgt_info':okgt_info,'ps_info':ps_info,'vl_info':vl_info,'rpa_info':rpa_info}
+
+                with open( fname, "w", encoding="utf8") as write_file:
+                        json.dump(data, write_file, indent=4)
+
+        except Exception as ex:
+            ems = QErrorMessage(self)
+            ems.setWindowTitle('Возникла ошибка')
+            ems.showMessage('Не получилось сохранить файл. '+
+                            'Проверьте введённые данные а также сохраняете ли вы уже в открытый файл.'+str(ex))
+        
+
+    #@traceback_erors
+    def InitialDataSaveAs(self):
+        try:
+            fname = QFileDialog.getSaveFileName(self, 'Сохранить файл ИД как', os.path.join(self.path_dict['id_save_as'],self.currentFileName),'*.okgt')
+            if fname[0] == "" and fname[1] == "": return
+            fname = fname[0]
+            self.path_dict['id_save_as'] = os.path.dirname(fname)
+            self.currentFilePath = fname
+            self.currentFileName = os.path.splitext(os.path.split(fname)[1])[0]
+            self.setWindowTitle(f"OKGT - {self.currentFileName}")
+
+            okgt_info, ps_info, vl_info, rpa_info = self.ToJsonFormat(*self.ReadTables())
+
+            data = {'okgt_info':okgt_info,'ps_info':ps_info,'vl_info':vl_info,'rpa_info':rpa_info}
+
+            with open( fname, "w", encoding="utf8") as write_file:
+                    json.dump(data, write_file, indent=4)
 
 
-        #self.TWGr.addTab(self.Tabs[self.vkl],self.nm_ivl[i]) # Добавляем закладку в QTabWidget
+        except Exception as ex:
+            ems = QErrorMessage(self)
+            ems.setWindowTitle('Возникла ошибка')
+            ems.showMessage('Не получилось сохранить файл. '+
+                            'Проверьте введённые данные а также сохраняете ли вы уже в открытый файл.'+str(ex))
+        else:
+            QMessageBox.information(self, 'Сохранение в файл','Операция прошла успешно.',
+                                          buttons=QMessageBox.Ok,
+                                          defaultButton=QMessageBox.Ok)
+        
+
     def closeEvent(self, event):
         Message = QMessageBox(QMessageBox.Question,  'Выход из программы',
             "Вы дейстивлеьно хотите выйти?", parent=self)
@@ -696,6 +1043,8 @@ class MyWindow(QMainWindow):
         #Message.addButton('Сохранить', QMessageBox.ActionRole)
         reply = Message.exec()
         if reply == 0:  
+            with open( 'last_path.json', "w", encoding="utf8") as f:
+                json.dump(self.path_dict,f, indent=4)
             qApp.quit()
         elif reply == 1:
             event.ignore()

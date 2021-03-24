@@ -1846,6 +1846,9 @@ class RPASettingsTable(QTableWidget):
     @traceback_erors
     def write_table(self,key,rpa_info):
         self.clear_table()
+        save_trig = self.typeDelegate["relative"]
+        self.setRelativeState(True)
+
         I_yst, t_yst = rpa_info[key]["rpa_I_setting"], rpa_info[key]["rpa_time_setting"]
         for i, (I,t) in enumerate(zip(I_yst, t_yst)):
             self.add_row()
@@ -1860,9 +1863,13 @@ class RPASettingsTable(QTableWidget):
             self.item(0,j).setText(str("" if pause is None else pause))
             for i, t_arc in enumerate(current_arc):
                 self.item(i+1,j).setText(str("" if t_arc is None else t_arc))
+
+        self.setRelativeState(save_trig)
            
     @traceback_erors    
     def read_table(self):
+        save_trig = self.typeDelegate["relative"]
+        self.setRelativeState(True)
         I_yst, t_yst, T_arc, T_pause = [], [], [],[]
         for i in range(1,self.rowCount()):
             I_yst.append(float(self.item(i,0).text()) if self.item(i,0).text()!='' else None)
@@ -1873,8 +1880,11 @@ class RPASettingsTable(QTableWidget):
             T_pause.append(float(self.item(0,j).text()) if self.item(0,j).text()!='' else None)
             for i in range(1,self.rowCount()):
                 T_arc[j-2].append(float(self.item(i,j).text()) if self.item(i,j).text()!='' else None)
+
+        
+        self.setRelativeState(save_trig)
           
-        return {"rpa_I_setting":I_yst,"rpa_time_setting":t_yst,"arc_setting":T_arc,"arc_pause":T_pause,"arc_times":len(T_arc)}
+        return {"rpa_I_setting":I_yst,"rpa_time_setting":t_yst,"arc_setting":T_arc,"arc_pause":T_pause} #,"arc_times":len(T_arc)
         
         
 
