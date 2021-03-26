@@ -10,7 +10,16 @@ import scipy.sparse.linalg as linalg
 
 from openpyxl import load_workbook
 
-
+def decToRoman(num):
+    rome_nums = ''
+    S1 = {1: 'IVX', 10: 'XLC', 100: 'CDM', 1000: 'M  '}
+    for i in (1000, 100, 10, 1):
+        if num // i != 0:
+            a, b, c = S1[i]
+            S = (a, a * 2, a * 3, a + b, b, b + a, b + 2 * a, b + 3 * a, a + c)
+            rome_nums += S[num // i - 1]
+            num = num - (num // i) * i
+    return rome_nums
 
 def load_data():
     """ Load catalog of parametrs of cunductors and supports  """
@@ -52,6 +61,7 @@ def load_data():
                 "R0":Kat.cell(row=19,column=j).value,
                 "Id":Kat.cell(row=20,column=j).value,
                 "Bsc":Kat.cell(row=21,column=j).value,
+                "Grounded_conductor":Kat.cell(row=22,column=j).value,
             }
         j+=1
 
@@ -505,6 +515,37 @@ def Isc_func2(x,a,b,c):
 
 def Isc_func(x,a,b,c,d,e,f):
     return a+b*x+c*x**2+d*x**3+e*x**4+f*x**5
+
+def I_sc_corector(I_sc, L_sc, borders=False):
+    try:
+        for i1, (I, L) in enumerate(zip(I_sc, L_sc)):
+            if I is not None or L is not None:
+                break
+        
+        for i2, I, L in zip(range(len(I_sc),0,-1),I_sc[::-1], L_sc[::-1]):
+            if I is not None or L is not None:
+                break
+        
+        I_sc1, L_sc1 = I_sc[i1:i2], L_sc[i1:i2]
+
+        if I_sc1[0]>I_sc1[-1]:
+            L_sc2 =  L_sc[:i1] + [(None if i is None else (i-L_sc1[0] if L_sc1[0]<L_sc1[-1] else L_sc1[0]-i)) for i in L_sc1] + L_sc[i2:]
+            I_sc2 = I_sc
+
+        else:
+            I_sc1.reverse()
+            L_sc1.reverse()
+            L_sc2 = L_sc[i2:][::-1] + [(None if i is None else (i-L_sc1[0] if L_sc1[0]<L_sc1[-1] else L_sc1[0]-i)) for i in L_sc1] + L_sc[:i1][::-1]
+            I_sc2 = I_sc[i2:][::-1] + I_sc1 + I_sc[:i1][::-1]
+
+        
+        if borders:
+            return I_sc2, L_sc2, (L_sc2[i1],L_sc2[i2-1])
+        else:
+            return I_sc2, L_sc2
+    except Exception as ex:
+        print(ex)
+        return I_sc, L_sc
     
 
 def Isc_get_maker(rpa_info):  
@@ -513,14 +554,15 @@ def Isc_get_maker(rpa_info):
         I_sc = val["I_sc"]
         L_sc = val["L_sc"]
 
-        if I_sc[0]>I_sc[-1]:
+        """ if I_sc[0]>I_sc[-1]:
             L_sc = [i-L_sc[0] if L_sc[0]<L_sc[-1] else L_sc[0]-i for i in L_sc] 
 
         else:
             I_sc.reverse()
             L_sc.reverse()
-            L_sc = [i-L_sc[0] if L_sc[0]<L_sc[-1] else L_sc[0]-i for i in L_sc]
+            L_sc = [i-L_sc[0] if L_sc[0]<L_sc[-1] else L_sc[0]-i for i in L_sc] """
 
+        I_sc, L_sc = I_sc_corector(I_sc, L_sc)
         
         interp = interp1d(L_sc, I_sc)
         popt, _ = curve_fit(Isc_func, L_sc, I_sc, maxfev=10**6) #, maxfev=10**6
@@ -699,6 +741,7 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30, callback=simple_call
                 okgt_max[start[1]] = {
                     "conductor": None,
                     "type": sector["type"],
+                    "sector_link":sector["name"],
                     "links": [(sector["name"])],
                     "length":sector["length"],
                 }
@@ -759,6 +802,7 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30, callback=simple_call
                     okgt_max[start[1]] = {
                         "conductor": sector["groundwire"],
                         "type": sector["type"],
+                        "sector_link":sector["name"],
                         "links": [(sector["name"],m,m+1)],
                         "length":dl,
                     }
@@ -814,14 +858,14 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30, callback=simple_call
                         supports = get_vl_sector_info(vl_name,key,(nc, kc,),{"name":"supports"},vl_info)
                         groundwires = get_vl_sector_info(vl_name,key,(nc, kc,),{"name":"groundwires"},vl_info)
                         countercables = get_vl_sector_info(vl_name,key,(nc, kc,),{"name":"countercables"},vl_info)
+                        
 
-
-                        keyword = ["type","is_Ps_sector","length","Tsupport","phase","mirrored","conductor"] #"start","end",
-                        d1 = [sector["type"],False,dl,supports["s1"],phases["p1"],phases["mirrored"],conductors["c1"]] #s1,e1,
-                        d2 = [sector["type"],False,dl,supports["s2"],phases["p2"],phases["mirrored"],conductors["c2"]] #s2,e2,
-                        d3 = [sector["type"],False,dl,supports["s3"],phases["p3"],phases["mirrored"],conductors["c3"]] #s3,e3,
-                        d4 = [sector["type"],False,dl,supports["s4"],"T1",phases["mirrored"],[groundwires["gw1"],groundwires["is_okgt"]=="gw1"]] #s4,e4,
-                        d5 = [sector["type"],False,dl,supports["s5"],"T2",phases["mirrored"],[groundwires["gw2"],groundwires["is_okgt"]=="gw2"]] #s5,e5,
+                        keyword = ["link_okgt","type","is_Ps_sector","length","Tsupport","phase","mirrored","conductor"] #"start","end",
+                        d1 = [sector.get("link_okgt",None),sector["type"],False,dl,supports["s1"],phases["p1"],phases["mirrored"],conductors["c1"]] #s1,e1,
+                        d2 = [sector.get("link_okgt",None),sector["type"],False,dl,supports["s2"],phases["p2"],phases["mirrored"],conductors["c2"]] #s2,e2,
+                        d3 = [sector.get("link_okgt",None),sector["type"],False,dl,supports["s3"],phases["p3"],phases["mirrored"],conductors["c3"]] #s3,e3,
+                        d4 = [sector.get("link_okgt",None),sector["type"],False,dl,supports["s4"],"T1",phases["mirrored"],[groundwires["gw1"],groundwires["is_okgt"]=="gw1"]] #s4,e4,
+                        d5 = [sector.get("link_okgt",None),sector["type"],False,dl,supports["s5"],"T2",phases["mirrored"],[groundwires["gw2"],groundwires["is_okgt"]=="gw2"]] #s5,e5,
 
                         for kw,rz1,rz2,rz3,rz4,rz5 in zip(keyword,d1,d2,d3,d4,d5):
                             data1[kw],data2[kw],data3[kw],data4[kw],data5[kw] = rz1,rz2,rz3,rz4,rz5
@@ -1022,6 +1066,7 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30, callback=simple_call
                 okgt_max[okgt_lst[isOkgt]["start"][1]] = {
                     "conductor": d[pos]["conductor"][0],
                     "type": "VL",
+                    "sector_link":d[0]["link_okgt"],
                     "links": [(d[j]["name_vl"],d[j]["link_branch"],d[j]["supportN"],d[j]["supportK"]) for j in range(0,len(d),5)],
                     "length":dl,
                 }
@@ -1388,11 +1433,11 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30, callback=simple_call
 
     print("length",i+1) """
 
-
+    
     result = {}
     for i, (n,k) in enumerate(okgt_branch):
         dl = 0
-        result[(n,k)] = {"B":[],"Bmax":[],"L":[],"type":[],"conductor":[],"links":[]}
+        result[(n,k)] = {"B":[],"Bmax":[],"L":[],"type":[],"conductor":[],"links":[],"sectors":[]}
         j_s = okgt_nodes[n][1]
         j_e = okgt_nodes[k][1]
 
@@ -1400,7 +1445,10 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30, callback=simple_call
             b = j_s
         else:
             pass 
-
+        
+        sector, tp, st = okgt_max[b]["sector_link"], okgt_max[b]["type"], 0
+        
+        ed = 0
         for j in range(b,j_e):
             Bmax = k_conductors.get(okgt_max[j]['conductor'],{}).get("Bsc",None)
             #result[(n,k)]["B"]+= [B[j],B[j]]   #[B[j]/10**6,B[j]/10**6] 
@@ -1415,9 +1463,23 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30, callback=simple_call
             dl+=okgt_max[j]['length']
             result[(n,k)]["L"].append(dl)
 
-            b = j_e
+            if okgt_max[j]["sector_link"]!=sector:
+                result[(n,k)]["sectors"].append((sector,tp,st,ed))
+                sector = okgt_max[j]["sector_link"]
+                tp = okgt_max[j]["type"]
+                st = ed
 
+            if j == j_e-1:
+                result[(n,k)]["sectors"].append((sector,tp,st,ed+2))
+                sector = okgt_max[j]["sector_link"]
+                tp = okgt_max[j]["type"]
+                
+            ed+=2
+        
+        b = j_e
 
+    #print([(val["sectors"],len(val["B"])) for val in result.values()])
+    #print(result)
     return result
 
 

@@ -2,9 +2,11 @@
 # pylint: disable=E1101
 #pyi-makespec --onefile --icon=icon.ico --noconsole VEZRead.py
 from PyQt5.QtWidgets import QApplication,QMainWindow,QWidget,QVBoxLayout,QHBoxLayout,QLabel,\
-    QScrollArea,QSizePolicy, QTableWidgetItem,QSplitter, QFrame, QSizePolicy, QListView, QTableWidget, qApp, QAction,\
-     QMessageBox,QFileDialog, QErrorMessage, QDoubleSpinBox, QSpacerItem, QLineEdit, QItemDelegate, QProgressBar,\
-     QTabWidget, QComboBox, QGridLayout, QCheckBox, QSpinBox, QDoubleSpinBox, QSpacerItem, QProgressDialog
+    QScrollArea,QSizePolicy,QSplitter, QSizePolicy, qApp, QAction,\
+    QMessageBox,QFileDialog, QErrorMessage, QDoubleSpinBox, QSpacerItem, QLineEdit, QItemDelegate, QProgressBar,\
+    QTabWidget, QComboBox, QGridLayout, QCheckBox, QSpinBox, QDoubleSpinBox, QSpacerItem, QProgressDialog,\
+    QButtonGroup, QRadioButton
+
 from PyQt5.QtGui import QPixmap, QPalette, QBrush, QImage, QIcon, QTransform, QStandardItemModel,QStandardItem,\
      QDoubleValidator, QValidator, QCloseEvent, QColor
 from PyQt5.QtCore import QPersistentModelIndex, Qt,  QSize, QModelIndex, QThread, pyqtSignal, QTimer
@@ -23,9 +25,11 @@ import matplotlib.pyplot as plt
 
 import json
 
-from calc_okgt import k_supports, k_conductors, main_calc
+from calc_okgt import k_supports, k_conductors, main_calc, I_sc_corector
 
 from initial_data2 import okgt_info, vl_info, ps_info, rpa_info
+
+import report_creator
 
 
 
@@ -80,22 +84,7 @@ class MyWindow(QMainWindow):
     def __init__(self,parent=None):
         super(MyWindow,self).__init__(parent)
 
-        try:
-            self.path_home = os.path.expanduser("~\\Desktop\\")
-        except Exception:
-            self.path_home = ""
-
-        last_path_keys = ['id_save_as','id_open']
-        try: 
-            with open('last_path.json', "r" ) as f:
-                self.path_dict = {i:j for i,j in json.load(f).items()}
-            
-        except Exception:
-            self.path_dict = {}
-        finally:
-            for path_key in last_path_keys:
-                if path_key not in self.path_dict:
-                    self.path_dict[path_key] = self.path_home
+        self.setSettings()
 
         self.currentFilePath = ''
         self.currentFileName = 'Новый файл'
@@ -125,12 +114,15 @@ class MyWindow(QMainWindow):
         self.Ps_Widget = QWidget()
         self.Rpa_Tabs = QTabWidget()
         self.Rez_Tabs = QTabWidget()
+        self.Rez_Tabs = QTabWidget()
+        self.Report_Widget = QWidget()
 
         self.mainTabWidget.addTab(self.Okgt_Widget,"ОКГТ")
         self.mainTabWidget.addTab(self.Ps_Widget,"ПС")
         self.mainTabWidget.addTab(self.Vl_Tabs,"ВЛ")
         self.mainTabWidget.addTab(self.Rpa_Tabs,"РЗА")
         self.mainTabWidget.addTab(self.Rez_Tabs,"Результаты")
+        self.mainTabWidget.addTab(self.Report_Widget,"Настроики документов")
 
 
         self.cntr_pr = {"trig":False,"timer":QTimer()}
@@ -141,6 +133,7 @@ class MyWindow(QMainWindow):
         self.okgt_tab_maker()
         self.ps_tab_maker()
         self.MenuBarMaker()
+        self.ReportTab()
 
         self.le_manager = LineEditManager(self.Vl_Tabs)
         self.vl_liks = {}
@@ -159,7 +152,36 @@ class MyWindow(QMainWindow):
         self.jsSpleater = "\n\u00C6\n"
         self.font_s = 14
 
-        
+
+    def setSettings(self):
+        try:
+            self.path_home = os.path.expanduser("~\\Desktop\\")
+        except Exception:
+            self.path_home = ""
+
+        last_path_keys = ['id_save_as','id_open']
+        report_settings = {
+            "show_arc_pause":True,
+            "show_Irpa":True,
+            "recipients":'',
+            "department_boss_type":False,
+            "department_boss_name":'',
+            "group_boss_name":'',
+        }
+        try: 
+            with open('main_settings.json', "r" ) as f:
+                self.main_settings = {i:j for i,j in json.load(f).items()}
+            
+        except Exception:
+            self.main_settings = {}
+        finally:
+            for path_key in last_path_keys:
+                if path_key not in self.main_settings:
+                    self.main_settings[path_key] = self.path_home
+
+            for setting, val in report_settings.items():
+                if setting not in self.main_settings:
+                    self.main_settings[setting] = val    
 
 
     def on_timeout(self):
@@ -174,6 +196,103 @@ class MyWindow(QMainWindow):
         if e.key() == Qt.Key_Control:
             self.cntr_pr["trig"] = False
 
+    
+    def ReportTab(self):
+        Vlayout = QVBoxLayout()
+
+        show_arc_pause = QCheckBox('Отображать длительность паузы между откл. КЗ и АПВ')
+        Vlayout.addWidget(show_arc_pause)
+        show_Irpa = QCheckBox('Отображать токи уставок РЗА')
+        Vlayout.addWidget(show_Irpa)
+
+        Vlayout.addWidget(QLabel('Получатели служебной записки:'))
+        recipients = QLineEdit()
+        #recipients.setMaximumHeight(70)
+        Vlayout.addWidget(recipients)
+
+        Vlayout.addWidget(QLabel('Название проекта:'))
+        project_name = QLineEdit()
+        #project_name.setMaximumHeight(70)
+        Vlayout.addWidget(project_name)
+
+        rb1 = QRadioButton('Начальник')
+        rb2 = QRadioButton('Зам. начальника')
+
+        button_group = QButtonGroup()
+        button_group.addButton(rb1,0)
+        button_group.addButton(rb2,1)
+
+        type_boss_layout = QHBoxLayout()
+        type_boss_layout.addWidget(rb1)
+        type_boss_layout.addWidget(rb2)
+        Vlayout.addLayout(type_boss_layout)
+
+        department_boss_name = QLineEdit()
+        Vlayout.addWidget(department_boss_name)
+
+        Vlayout.addWidget(QLabel('Заведующий группы:'))
+        group_boss_name = QLineEdit()
+        Vlayout.addWidget(group_boss_name)
+
+        Vlayout.addStretch(2)
+
+        Hlayout = QHBoxLayout()
+        Hlayout.addLayout(Vlayout)
+        Hlayout.addStretch(2)
+        Hlayout.setStretchFactor(Vlayout,1)
+        
+
+        self.Report_Widget.setLayout(Hlayout)
+
+        self.ReportSetingsForm = {
+            "show_arc_pause":show_arc_pause,
+            "show_Irpa":show_Irpa,
+            "recipients":recipients,
+            "project_name":project_name,
+            "department_boss_type":button_group,
+            "department_boss_name":department_boss_name,
+            "group_boss_name":group_boss_name,
+        }
+
+        self.setReportSettings(self.main_settings)
+        
+
+    def setReportSettings(self, source):
+        self.ReportSetingsForm["show_arc_pause"].setCheckState(Qt.Checked if source["show_arc_pause"] else Qt.Unchecked)
+        self.ReportSetingsForm["show_Irpa"].setCheckState(Qt.Checked if source["show_Irpa"] else Qt.Unchecked)
+        self.ReportSetingsForm["recipients"].setText(source["recipients"])
+        self.ReportSetingsForm["department_boss_name"].setText(source["department_boss_name"])
+        self.ReportSetingsForm["group_boss_name"].setText(source["group_boss_name"])
+        self.ReportSetingsForm["department_boss_type"].button(int(source["department_boss_type"])).setChecked(True)
+
+        if "project_name" in source:
+            self.ReportSetingsForm["project_name"].setText(source["project_name"])
+
+    @traceback_erors
+    def getReportSettings(self):
+        return {
+            "show_arc_pause": True if self.ReportSetingsForm["show_arc_pause"].checkState()==Qt.Checked else False,
+            "show_Irpa": True if self.ReportSetingsForm["show_Irpa"].checkState()==Qt.Checked else False,
+            "recipients": self.ReportSetingsForm["recipients"].text(),
+            "project_name": self.ReportSetingsForm["project_name"].text(),
+            "department_boss_name": self.ReportSetingsForm["department_boss_name"].text(),
+            "group_boss_name": self.ReportSetingsForm["group_boss_name"].text(),
+            "department_boss_type": bool(self.ReportSetingsForm["department_boss_type"].checkedId())
+        }
+        
+    
+    def SaveReportSettings(self):
+        try:
+            for key, val in self.getReportSettings().items():
+                if key != "project_name":
+                    self.main_settings[key] = val
+        except Exception:
+            pass
+        else:
+            QMessageBox.information(self, 'Сохранение параметров отчёта',
+                                        'Операция прошла успешно.',
+                                        buttons=QMessageBox.Ok,
+                                        defaultButton=QMessageBox.Ok)
     
 
     def MenuBarMaker(self):
@@ -273,6 +392,15 @@ class MyWindow(QMainWindow):
         run_calc.setStatusTip('Запустить расчёт ОКГТ')
         run_calc.triggered.connect(self.RunCalculation)
         calcMenu.addAction(run_calc)
+
+        settingsMenu = menubar.addMenu('&Настройки')
+
+        save_recepients_settings = QAction( '&Сохранить параметры отчёта', self) #QIcon('exit.png'),
+        #run_calc.setShortcut("Ctrl+R")
+        save_recepients_settings.setStatusTip('Сохранить параметры отчёта по умолчанию')
+        save_recepients_settings.triggered.connect(self.SaveReportSettings)
+        settingsMenu.addAction(save_recepients_settings)
+
 
 
     def AddBranch(self):
@@ -701,17 +829,20 @@ class MyWindow(QMainWindow):
 
 
     def refreshFigure(self,widget,data):
-        I_sc, L_sc =  data['I_sc'], data['L_sc']
+        #I_sc, L_sc =  data['I_sc'], data['L_sc']
+        I_sc, L_sc, borders = I_sc_corector(data['I_sc'], data['L_sc'], borders=True)
         ax = self.rpa_liks[widget]['axis']
+        title = self.rpa_liks[widget]['ps_combo'].currentText()+' - '+self.rpa_liks[widget]['vl_combo'].currentText()
         ax.clear()
         ax.set_xlabel('L, км',fontsize=self.font_s) 
         ax.set_ylabel('Iкз, кА',fontsize=self.font_s)
-        ax.set_title("Кривая тока КЗ",fontsize=self.font_s)
+        ax.set_title(title,fontsize=self.font_s, loc='left') #"Кривая тока КЗ"
         ax.tick_params(labelsize=self.font_s)
         ax.grid(True) 
         ax.plot(L_sc,I_sc,'r')#,label=self.FAName
+        #fig.suptitle('This figure suptitle should be on the left', horizontalalignment = 'left')
         
-        #axes.set_xlim([xmin,xmax])
+        ax.set_xlim(borders)
         
         xloc = plt.MaxNLocator()
         ax.xaxis.set_major_locator(xloc)
@@ -965,20 +1096,24 @@ class MyWindow(QMainWindow):
 
     def InitialDataOpen(self):
         try:
-            fname = QFileDialog.getOpenFileName(self, 'Открыть файл ИД', self.path_dict['id_open'],'*.okgt')
+            fname = QFileDialog.getOpenFileName(self, 'Открыть файл ИД', self.main_settings['id_open'],'*.okgt')
             if fname[0] == "" and  fname[1] == "": return
             fname = fname[0]
 
-            self.path_dict['id_open'] = os.path.dirname(fname)
+            self.main_settings['id_open'] = os.path.dirname(fname)
             self.currentFilePath = fname
             self.currentFileName = os.path.splitext(os.path.split(fname)[1])[0]
             self.setWindowTitle(f"OKGT - {self.currentFileName}")
 
             with open(fname, "r", encoding="utf8") as f:
                 data  = json.load(f)
-
-            #print(self.FromJsonFormat(**data))
-            self.WriteTables(*self.FromJsonFormat(**data))
+            
+            
+            self.WriteTables(*self.FromJsonFormat(**{i:data[i] for i in ['okgt_info','ps_info','vl_info','rpa_info']}))
+            if "report_settings" in data:
+                self.setReportSettings(data["report_settings"])
+            else:
+                self.setReportSettings(self.main_settings)
             
 
         except Exception as ex:
@@ -993,7 +1128,13 @@ class MyWindow(QMainWindow):
                 fname = self.currentFilePath
                 okgt_info, ps_info, vl_info, rpa_info = self.ToJsonFormat(*self.ReadTables())
 
-                data = {'okgt_info':okgt_info,'ps_info':ps_info,'vl_info':vl_info,'rpa_info':rpa_info}
+                data = {
+                    'okgt_info':okgt_info,
+                    'ps_info':ps_info,
+                    'vl_info':vl_info,
+                    'rpa_info':rpa_info,
+                    "report_settings":self.getReportSettings(),
+                }
 
                 with open( fname, "w", encoding="utf8") as write_file:
                         json.dump(data, write_file, indent=4)
@@ -1008,17 +1149,23 @@ class MyWindow(QMainWindow):
     #@traceback_erors
     def InitialDataSaveAs(self):
         try:
-            fname = QFileDialog.getSaveFileName(self, 'Сохранить файл ИД как', os.path.join(self.path_dict['id_save_as'],self.currentFileName),'*.okgt')
+            fname = QFileDialog.getSaveFileName(self, 'Сохранить файл ИД как', os.path.join(self.main_settings['id_save_as'],self.currentFileName),'*.okgt')
             if fname[0] == "" and fname[1] == "": return
             fname = fname[0]
-            self.path_dict['id_save_as'] = os.path.dirname(fname)
+            self.main_settings['id_save_as'] = os.path.dirname(fname)
             self.currentFilePath = fname
             self.currentFileName = os.path.splitext(os.path.split(fname)[1])[0]
             self.setWindowTitle(f"OKGT - {self.currentFileName}")
 
             okgt_info, ps_info, vl_info, rpa_info = self.ToJsonFormat(*self.ReadTables())
 
-            data = {'okgt_info':okgt_info,'ps_info':ps_info,'vl_info':vl_info,'rpa_info':rpa_info}
+            data = {
+                'okgt_info':okgt_info,
+                'ps_info':ps_info,
+                'vl_info':vl_info,
+                'rpa_info':rpa_info,
+                "report_settings":self.getReportSettings(),
+            }
 
             with open( fname, "w", encoding="utf8") as write_file:
                     json.dump(data, write_file, indent=4)
@@ -1043,8 +1190,8 @@ class MyWindow(QMainWindow):
         #Message.addButton('Сохранить', QMessageBox.ActionRole)
         reply = Message.exec()
         if reply == 0:  
-            with open( 'last_path.json', "w", encoding="utf8") as f:
-                json.dump(self.path_dict,f, indent=4)
+            with open( 'main_settings.json', "w", encoding="utf8") as f:
+                json.dump(self.main_settings,f, indent=4)
             qApp.quit()
         elif reply == 1:
             event.ignore()
