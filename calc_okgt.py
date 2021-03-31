@@ -10,16 +10,7 @@ import scipy.sparse.linalg as linalg
 
 from openpyxl import load_workbook
 
-def decToRoman(num):
-    rome_nums = ''
-    S1 = {1: 'IVX', 10: 'XLC', 100: 'CDM', 1000: 'M  '}
-    for i in (1000, 100, 10, 1):
-        if num // i != 0:
-            a, b, c = S1[i]
-            S = (a, a * 2, a * 3, a + b, b, b + a, b + 2 * a, b + 3 * a, a + c)
-            rome_nums += S[num // i - 1]
-            num = num - (num // i) * i
-    return rome_nums
+
 
 def load_data():
     """ Load catalog of parametrs of cunductors and supports  """
@@ -578,7 +569,7 @@ def J_matrix_builder(point_sc,J_make_lst,length_to_ps_lst,rpa_info,Isc_funcs,s_i
     support = point_sc['support']
     ps_lst = point_sc['ps_lst']
 
-    Isc = {i: Isc_funcs[(vl_name,i)]["aproFunc"](length_to_ps_lst[vl_name][i][(branch),support]) for i in ps_lst}
+    Isc = {i: Isc_funcs[(vl_name,i)]["aproFunc"](length_to_ps_lst[vl_name][i][branch,support]) for i in ps_lst}
 
     T_m = {}
 
@@ -1437,7 +1428,17 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30, callback=simple_call
     result = {}
     for i, (n,k) in enumerate(okgt_branch):
         dl = 0
-        result[(n,k)] = {"B":[],"Bmax":[],"L":[],"type":[],"conductor":[],"links":[],"sectors":[]}
+        result[(n,k)] = {
+            "B":[],
+            "Bmax":[],
+            "L":[],
+            "type":[],
+            "conductor":[],
+            "links":[],
+            "sectors":[],
+            'okgt_types':set(),
+            'length_to_ps_lst': length_to_ps_lst
+        }
         j_s = okgt_nodes[n][1]
         j_e = okgt_nodes[k][1]
 
@@ -1451,6 +1452,7 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30, callback=simple_call
         ed = 0
         for j in range(b,j_e):
             Bmax = k_conductors.get(okgt_max[j]['conductor'],{}).get("Bsc",None)
+            result[(n,k)]['okgt_types'].add(okgt_max[j]['conductor'])
             #result[(n,k)]["B"]+= [B[j],B[j]]   #[B[j]/10**6,B[j]/10**6] 
             result[(n,k)]["B"]+= [B[j]/10**6,B[j]/10**6] 
             result[(n,k)]["Bmax"]+=[Bmax,Bmax]
@@ -1475,10 +1477,13 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30, callback=simple_call
                 tp = okgt_max[j]["type"]
                 
             ed+=2
+
+            
         
         b = j_e
 
-    #print([(val["sectors"],len(val["B"])) for val in result.values()])
+    #print([val['okgt_types'] for val in result.values()])
+    print([val["sectors"] for val in result.values()])
     #print(result)
     return result
 

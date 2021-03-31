@@ -29,7 +29,9 @@ from calc_okgt import k_supports, k_conductors, main_calc, I_sc_corector
 
 from initial_data2 import okgt_info, vl_info, ps_info, rpa_info
 
-import report_creator
+from report_creator import memorandum
+
+import traceback
 
 
 
@@ -151,6 +153,9 @@ class MyWindow(QMainWindow):
         self.resFig = {}
         self.jsSpleater = "\n\u00C6\n"
         self.font_s = 14
+
+        self.calc_results = None
+        self.sectorsFig = {}
 
 
     def setSettings(self):
@@ -293,6 +298,21 @@ class MyWindow(QMainWindow):
                                         'Операция прошла успешно.',
                                         buttons=QMessageBox.Ok,
                                         defaultButton=QMessageBox.Ok)
+
+    
+    def CreateMemorandumDoc(self):
+        report_setings = self.getReportSettings()
+        okgt_info_new, _, vl_info_new,  rpa_info_new = self.ReadTables()
+
+        #self.calc_results = None
+        #self.sectorsFig = {}
+
+        try:
+            memorandum(okgt_info_new, vl_info_new, rpa_info_new, self.calc_results, report_setings)
+
+        except Exception:
+            print(traceback.format_exc())
+        
     
 
     def MenuBarMaker(self):
@@ -392,6 +412,12 @@ class MyWindow(QMainWindow):
         run_calc.setStatusTip('Запустить расчёт ОКГТ')
         run_calc.triggered.connect(self.RunCalculation)
         calcMenu.addAction(run_calc)
+
+        save_memorandum = QAction( '&Создать служебную записку', self) #QIcon('exit.png'),
+        #save_memorandum.setShortcut("Ctrl+R")
+        save_memorandum.setStatusTip('Создать служебную записку')
+        save_memorandum.triggered.connect(self.CreateMemorandumDoc)
+        calcMenu.addAction(save_memorandum)
 
         settingsMenu = menubar.addMenu('&Настройки')
 
@@ -906,24 +932,29 @@ class MyWindow(QMainWindow):
                 plt.close(self.resFig[wd][0])
                 del self.resFig[wd]
             self.Rez_Tabs.removeTab(ind)
-        results = self.okgt_calc_tread.getData()
-        for (n,k), val in results.items():
+        self.sectorsFig = {}
+        self.calc_results = self.okgt_calc_tread.getData()
+        for val in self.calc_results.values():
+            for sector in val["sectors"]:
+                if sector[1] != 'single_dielectric':
+                    st, ed = sector[2:]
 
-            fg = plt.figure(dpi=75) # Создаём фигуру графика 
-            fg_widget = FigureCanvas(fg) # Помещаем фигуру в контейнер
-            ax = fg.add_subplot(111) #
-            ax.plot(val["L"],val["B"],'r',label="Bрасч.")
-            ax.plot(val["L"],val["Bmax"],'b',label="Вмах")
-            ax.set_xlabel('L, км',fontsize=self.font_s) 
-            ax.set_ylabel('B, кА^2*c',fontsize=self.font_s)
-            ax.set_title(f"{n} - {k}",fontsize=self.font_s)
-            ax.tick_params(labelsize=self.font_s)
-            ax.set_xlim([val["L"][0],val["L"][-1]])
-            ax.grid(True)
+                    fg = plt.figure(dpi=75) # Создаём фигуру графика 
+                    fg_widget = FigureCanvas(fg) # Помещаем фигуру в контейнер
+                    ax = fg.add_subplot(111) #
+                    ax.plot(val["L"][st:ed],val["B"][st:ed],'r',label="Bрасч.")
+                    ax.plot(val["L"][st:ed],val["Bmax"][st:ed],'b',label="Вмах")
+                    ax.set_xlabel('L, км',fontsize=self.font_s) 
+                    ax.set_ylabel('B, кА^2*c',fontsize=self.font_s)
+                    ax.set_title(f"{sector[0]}",fontsize=self.font_s)
+                    ax.tick_params(labelsize=self.font_s)
+                    ax.set_xlim([val["L"][st],val["L"][ed-1]])
+                    ax.grid(True)
 
-            self.Rez_Tabs.addTab(fg_widget, f"{n} - {k}")
+                    self.Rez_Tabs.addTab(fg_widget, f"{sector[0]}")
 
-            self.resFig[fg_widget] = (fg,ax)
+                    self.resFig[fg_widget] = (fg,ax)
+                    self.sectorsFig[sector] = (fg,ax)
 
         self.mainTabWidget.setCurrentIndex(4)
 
@@ -1125,19 +1156,25 @@ class MyWindow(QMainWindow):
     def InitialDataSave(self):
         try:
             if os.path.exists(self.currentFilePath):
-                fname = self.currentFilePath
-                okgt_info, ps_info, vl_info, rpa_info = self.ToJsonFormat(*self.ReadTables())
+                Message = QMessageBox(QMessageBox.Question,  'Сохранить',
+                    "Вы дейстивлеьно хотите заменить "+self.currentFileName+"?", parent=self)
+                Message.addButton('Да', QMessageBox.YesRole)
+                Message.addButton('Нет', QMessageBox.NoRole)
+                reply = Message.exec()
+                if reply == 0:
+                    fname = self.currentFilePath
+                    okgt_info, ps_info, vl_info, rpa_info = self.ToJsonFormat(*self.ReadTables())
 
-                data = {
-                    'okgt_info':okgt_info,
-                    'ps_info':ps_info,
-                    'vl_info':vl_info,
-                    'rpa_info':rpa_info,
-                    "report_settings":self.getReportSettings(),
-                }
+                    data = {
+                        'okgt_info':okgt_info,
+                        'ps_info':ps_info,
+                        'vl_info':vl_info,
+                        'rpa_info':rpa_info,
+                        "report_settings":self.getReportSettings(),
+                    }
 
-                with open( fname, "w", encoding="utf8") as write_file:
-                        json.dump(data, write_file, indent=4)
+                    with open( fname, "w", encoding="utf8") as write_file:
+                            json.dump(data, write_file, indent=4)
 
         except Exception as ex:
             ems = QErrorMessage(self)
