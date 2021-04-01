@@ -9,6 +9,9 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.enum.style import WD_STYLE
 from docx.oxml.shared import OxmlElement, qn
+from docx.enum.text import WD_LINE_SPACING
+
+from PIL import Image
 
 from calc_okgt import k_conductors
 
@@ -52,16 +55,18 @@ def cell_settings(cell, text, align="center", width=None, font_size=12, font_nam
 
 def rpa_settings_table(doc, tbl_ind, vl_name, ps_name, current_rpa_info, report_setings, font_size=12, font_name="Times"):
     p1=doc.add_paragraph()
-    p1.add_run(f'Таблица {tbl_ind} - {vl_name} > {ps_name}')
+    p1.add_run(f'Табл. {tbl_ind} - {vl_name} > {ps_name}')
     p1.runs[0].font.size = Pt(font_size)
     p1.runs[0].font.name = font_name
     pt_f = p1.paragraph_format
+    pt_f.first_line_indent = Cm(0.25)
     pt_f.alignment = WD_ALIGN_PARAGRAPH.LEFT
     pt_f.space_after = Pt(0)
     pt_f.space_before = Pt(10)
     
 
-    rows = len(current_rpa_info["rpa_time_setting"])+3 if report_setings["show_arc_pause"] else len(current_rpa_info["rpa_time_setting"])+2
+    rows = len(current_rpa_info["rpa_time_setting"])+3 if report_setings["show_arc_pause"] and\
+        current_rpa_info["arc_times"]>0 else len(current_rpa_info["rpa_time_setting"])+2
     cols = 3+current_rpa_info["arc_times"] if report_setings["show_Irpa"] else 2+current_rpa_info["arc_times"] 
     # Создаём шапку таблицы
     
@@ -76,7 +81,7 @@ def rpa_settings_table(doc, tbl_ind, vl_name, ps_name, current_rpa_info, report_
     else:
         tbl.cell(0, 1).merge(tbl.cell(0, cols-1))
 
-    if report_setings["show_arc_pause"]:
+    if report_setings["show_arc_pause"] and current_rpa_info["arc_times"]>0:
         tbl.cell(rows-1, 0).merge(tbl.cell(rows-1, cols-1-current_rpa_info["arc_times"]))
 
     cell_settings(tbl.cell(0, 0), 'Ступень защиты ВЛ', align="center", font_size=font_size, font_name=font_name)
@@ -98,7 +103,7 @@ def rpa_settings_table(doc, tbl_ind, vl_name, ps_name, current_rpa_info, report_
     for i in range(current_rpa_info["arc_times"]):
         cell_settings(tbl.cell(1, 2+shift+i), f'АПВ№{i+1}', align="center", font_size=font_size, font_name=font_name)
 
-    if report_setings["show_arc_pause"]:
+    if report_setings["show_arc_pause"] and current_rpa_info["arc_times"]>0:
         cell_settings(tbl.cell(rows-1, 0), 'Длительность паузы между отключением КЗ и срабатыванием АПВ, с', align="center", font_size=font_size, font_name=font_name)
         
 
@@ -156,7 +161,7 @@ def description_settings(doc, okgt_info, vl_info, calc_results, font_size=12, fo
 
         for sector in val["sectors"]:
             if sector[1] == "VL":
-                st, ed = sector[2:]
+                st, ed = sector[2:4]
                 start = val['links'][st][0]
                 end = val['links'][ed-1][0]
                 
@@ -237,7 +242,7 @@ def description_settings(doc, okgt_info, vl_info, calc_results, font_size=12, fo
                                     
                             conter = (item["D_countercable"],connect_to_ps)  
 
-                    print(N,K,wires, ground, conter)  
+                    #print(N,K,wires, ground, conter)  
                     subsectors_info.append((N,K,wires, ground, conter))
 
                 if subsectors_info:
@@ -251,11 +256,10 @@ def description_settings(doc, okgt_info, vl_info, calc_results, font_size=12, fo
                     row_cells = tbl.add_row().cells
                     row_cells[0].merge(row_cells[1])
 
-                    cell_settings(row_cells[0], 'Наименование субучастков ОКГТ', align="center", width=0.05, font_size=font_size, font_name=font_name)
-                    row_cells[1].width = Inches(0.05)
-                    cell_settings(row_cells[2], 'Сопротивление постоянному току не более, Ом/км', align="center", width=0.1, font_size=font_size, font_name=font_name) 
-                    cell_settings(row_cells[3], 'Допустимый тепловой импульс, кА^2', align="center", width=0.1, font_size=font_size, font_name=font_name) 
-                    cell_settings(row_cells[4], 'Дополнительные мероприятия', align="center", width=2, font_size=font_size, font_name=font_name)
+                    cell_settings(row_cells[0], 'Наименование субучастков ОКГТ', align="center", font_size=font_size, font_name=font_name)
+                    cell_settings(row_cells[2], 'Сопротивление постоянному току не более, Ом/км', align="center", font_size=font_size, font_name=font_name) 
+                    cell_settings(row_cells[3], 'Допустимый тепловой импульс, кА\u00B2·c', align="center", font_size=font_size, font_name=font_name) 
+                    cell_settings(row_cells[4], 'Дополнительные мероприятия', align="center", font_size=font_size, font_name=font_name)
 
                     for item in subsectors_info:
                         row_cells1 = tbl.add_row().cells
@@ -311,17 +315,112 @@ def description_settings(doc, okgt_info, vl_info, calc_results, font_size=12, fo
                         else:
                             cell_settings(row_cells1[4], '-', align="center", font_size=font_size, font_name=font_name)
                         
+            elif sector[1] == "single_dielectric":
+                st, ed = sector[2:4]
+
+                row_cells = tbl.add_row().cells
+                row_cells[0].merge(row_cells[1])
+                row_cells[2].merge(row_cells[4])
+
+                cell_settings(row_cells[0], 'Наименование участка ОКГТ', align="left", font_size=font_size, font_name=font_name)
+                cell_settings(row_cells[2], sector[0], align="left", font_size=font_size, font_name=font_name)
+
+                row_cells = tbl.add_row().cells
+                row_cells[0].merge(row_cells[1])
+
+                cell_settings(row_cells[0], 'Наименование субучастков ОКГТ', align="center", font_size=font_size, font_name=font_name)
+                cell_settings(row_cells[2], 'Сопротивление постоянному току не более, Ом/км', align="center", font_size=font_size, font_name=font_name) 
+                cell_settings(row_cells[3], 'Допустимый тепловой импульс, кА\u00B2·c', align="center", font_size=font_size, font_name=font_name) 
+                cell_settings(row_cells[4], 'Дополнительные мероприятия', align="center",font_size=font_size, font_name=font_name)
+
+                row_cells1 = tbl.add_row().cells
+                row_cells2 = tbl.add_row().cells
+
+                row_cells1[0].merge(row_cells1[1])
+                row_cells1[2].merge(row_cells2[2])
+                row_cells1[3].merge(row_cells2[3])
+                row_cells1[4].merge(row_cells2[4])
+
+                cell_settings(row_cells1[0], 'Подземный диэлектрический ВОК', align="center", font_size=font_size, font_name=font_name)
+                cell_settings(row_cells2[0], 'Длина:', align="left", font_size=font_size, font_name=font_name)
+                cell_settings(row_cells2[1], f'{round(abs(val["L"][ed-1]-val["L"][st]),3)} км', align="left", font_size=font_size, font_name=font_name)
+
+                cell_settings(row_cells1[2], '-', align="center", font_size=font_size, font_name=font_name)
+                cell_settings(row_cells1[3], '-', align="center", font_size=font_size, font_name=font_name)
+                cell_settings(row_cells1[4], '-', align="center", font_size=font_size, font_name=font_name)
+
+            elif sector[1] == "single_conductive":
+                st, ed = sector[2:4]
+                for okgt_sector in okgt_info[(n,k)]:
+                    if okgt_sector["name"] == sector[0]:
+                        break
+
+                length = round(abs(val["L"][ed-1]-val["L"][st]),3)
+                R = k_conductors[okgt_sector["groundwire"]]["R0"]
+                W = k_conductors[okgt_sector["groundwire"]]["Bsc"]
+
+                s = []
+                count = 0
+                if okgt_sector["point_grounded"]>0:
+                    if okgt_sector["point_resistance"]<30.0:
+                        count += 1
+                        s.append(f'{count}. Обеспечить на данном участке сопротивление ЗУ опор не более {round(okgt_sector["point_resistance"],2)} Ом')
+
+                if okgt_sector["countercable"]:
+                    count += 1
+                    s.append(f'{count}. ЗУ опор соединить между собой горизонтальным заземлителем из стали круглой диаметром {round(okgt_sector["D_countercable"],1)} мм')
+
+                if W is not None:
+
+                    row_cells = tbl.add_row().cells
+                    row_cells[0].merge(row_cells[1])
+                    row_cells[2].merge(row_cells[4])
+
+                    cell_settings(row_cells[0], 'Наименование участка ОКГТ', align="left", font_size=font_size, font_name=font_name)
+                    cell_settings(row_cells[2], sector[0], align="left", font_size=font_size, font_name=font_name)
+
+                    row_cells = tbl.add_row().cells
+                    row_cells[0].merge(row_cells[1])
+
+                    cell_settings(row_cells[0], 'Наименование субучастков ОКГТ', align="center", font_size=font_size, font_name=font_name)
+                    cell_settings(row_cells[2], 'Сопротивление постоянному току не более, Ом/км', align="center", font_size=font_size, font_name=font_name) 
+                    cell_settings(row_cells[3], 'Допустимый тепловой импульс, кА\u00B2·c', align="center", font_size=font_size, font_name=font_name) 
+                    cell_settings(row_cells[4], 'Дополнительные мероприятия', align="center",font_size=font_size, font_name=font_name)
+
+                    row_cells1 = tbl.add_row().cells
+                    row_cells2 = tbl.add_row().cells
+
+                    row_cells1[0].merge(row_cells1[1])
+                    row_cells1[2].merge(row_cells2[2])
+                    row_cells1[3].merge(row_cells2[3])
+                    row_cells1[4].merge(row_cells2[4])
+
+                    cell_settings(row_cells1[0], 'Электропроводящий ВОК', align="center", font_size=font_size, font_name=font_name)
+                    cell_settings(row_cells2[0], 'Длина:', align="left", font_size=font_size, font_name=font_name)
+                    cell_settings(row_cells2[1], f'{length} км', align="left", font_size=font_size, font_name=font_name)
+
+                    cell_settings(row_cells1[2], str(R), align="center", font_size=font_size, font_name=font_name)
+                    cell_settings(row_cells1[3], okgt_sector["groundwire"], align="center", font_size=font_size, font_name=font_name)
 
 
-                #print(subsectors)ps_name
+                    advices = ';\n'.join(s)
 
-    set_col_widths(tbl, (Cm(2),Cm(2.5),Cm(5),Cm(4),Cm(7)))
+                    if len(advices)!=0:
+                        cell_settings(row_cells1[4], advices+'.', align="left", font_size=font_size, font_name=font_name)
+                    else:
+                        cell_settings(row_cells1[4], '-', align="center", font_size=font_size, font_name=font_name)
+                    
+    set_col_widths(tbl, (Cm(2),Cm(2.5),Cm(5),Cm(4),Cm(5.5)))
+
                 
 def grounded_wires(doc, calc_results, font_size=12, font_name="Times"):
     tbl=doc.add_table(rows=1, cols=2, style='Table Grid')
-    recomends = list(set().union(*[i['okgt_types'] for i in calc_results.values()]).difference(set([None])))
+    sets = []
+    for i in calc_results.values():
+        sets+=i['okgt_types']
+    recomends = list(set().union(*sets).difference(set([None])))
     recomends = sorted(recomends, key=lambda x: k_conductors[x]["Bsc"])
-    cell_settings(tbl.cell(0, 0), 'Допустимый тепловой импульс ОКГТ, кА^2\u2E31с', align="center", font_size=font_size, font_name=font_name)
+    cell_settings(tbl.cell(0, 0), 'Допустимый тепловой импульс ОКГТ, кА\u00B2·c', align="center", font_size=font_size, font_name=font_name)
     cell_settings(tbl.cell(0, 1), 'Марка заземляющего проводника', align="center", font_size=font_size, font_name=font_name)
     for item in recomends:
         if k_conductors[item]["Grounded_conductor"] is not None:
@@ -333,7 +432,7 @@ def grounded_wires(doc, calc_results, font_size=12, font_name="Times"):
     
 
 
-def memorandum(okgt_info, vl_info, rpa_info, calc_results, report_setings):
+def memorandum(fname, okgt_info, vl_info, rpa_info, calc_results, report_setings):
     doc = DocxTemplate("docx_templates/memorandum.docx")
     context = { 
         'recipients' : R('\n'.join([i.strip() for i in report_setings['recipients'].split(';')])),
@@ -348,39 +447,342 @@ def memorandum(okgt_info, vl_info, rpa_info, calc_results, report_setings):
     # Наследуем стиль и изменяем его
     style = document.styles['Normal'] # Берём стиль Нормальный
     f0 = style.font # Переменная для изменения параметров стиля
-    f0.name = 'Times' # Шрифт
+    f0.name = 'Times New Roman' # Шрифт
     f0.size = Pt(14) # Размер шрифта
 
+    description_settings(document,okgt_info, vl_info, calc_results, font_name='Times New Roman')
+
+    p1=document.add_paragraph()
+    p1.add_run(f'2) Параметры работы РЗ приняты согласно Служебной записке ОРЗА таблицах 2-{len(rpa_info)+1}')
+    p1.runs[0].font.size = Pt(14) #Меняем размер шрифта параграфа
+    pt_f = p1.paragraph_format
+    pt_f.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    pt_f.first_line_indent = Cm(1)
+    pt_f.space_after = Pt(0)
+    pt_f.space_before = Pt(20)
+
     for i, ((vl_name,ps_name), rpa) in enumerate(rpa_info.items()):
-        rpa_settings_table(document, i+1, vl_name, ps_name, rpa, report_setings)
-
-    
-    p1=document.add_paragraph()
-    p1.add_run('Тестовый текст')
-    p1.runs[0].font.size = Pt(9) #Меняем размер шрифта параграфа
-    pt_f = p1.paragraph_format
-    pt_f.alignment = WD_ALIGN_PARAGRAPH.LEFT
-    pt_f.space_after = Pt(0)
-    pt_f.space_before = Pt(10)
-
-    description_settings(document,okgt_info, vl_info, calc_results)
+        rpa_settings_table(document, i+2, vl_name, ps_name, rpa, report_setings, font_name='Times New Roman')
 
     p1=document.add_paragraph()
-    p1.add_run('Тестовый текст')
-    p1.runs[0].font.size = Pt(9) #Меняем размер шрифта параграфа
+    p1.add_run(f'3) Для присоединения ОКГТ к опорам ВЛ использовать провода, указанные в таблице {len(rpa_info)+2}.')
+    p1.runs[0].font.size = Pt(14) #Меняем размер шрифта параграфа
     pt_f = p1.paragraph_format
-    pt_f.alignment = WD_ALIGN_PARAGRAPH.LEFT
-    pt_f.space_after = Pt(0)
-    pt_f.space_before = Pt(10)
+    pt_f.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    pt_f.first_line_indent = Cm(1)
+    pt_f.space_after = Pt(10)
+    pt_f.space_before = Pt(20)
 
+    p1=document.add_paragraph()
+    p1.add_run(f'Табл. {len(rpa_info)+2} – Рекомендации по выбору заземляющего проводника')
+    p1.runs[0].font.size = Pt(12) #Меняем размер шрифта параграфа
+    pt_f = p1.paragraph_format
+    pt_f.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    pt_f.first_line_indent = Cm(0.25)
+    pt_f.space_after = Pt(0)
+    pt_f.space_before = Pt(0)
 
     grounded_wires(document, calc_results)
 
+    p1=document.add_paragraph()
+    p1.add_run('4) Стойкость ОКГТ к воздействию импульса грозового разряда:')
+    p1.runs[0].font.size = Pt(14) #Меняем размер шрифта параграфа
+    pt_f = p1.paragraph_format
+    pt_f.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    pt_f.first_line_indent = Cm(1)
+    pt_f.space_after = Pt(5)
+    pt_f.space_before = Pt(20)
+
+    p1=document.add_paragraph()
+    p1.add_run('- амплитуда тока молнии не менее 100 кА;')
+    p1.runs[0].font.size = Pt(14) #Меняем размер шрифта параграфа
+    pt_f = p1.paragraph_format
+    pt_f.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    pt_f.first_line_indent = Cm(1.25)
+    pt_f.space_after = Pt(0)
+    pt_f.space_before = Pt(0)
+
+    p1=document.add_paragraph()
+    p1.add_run('- заряд молнии не менее 50 Кл.')
+    p1.runs[0].font.size = Pt(14) #Меняем размер шрифта параграфа
+    pt_f = p1.paragraph_format
+    pt_f.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    pt_f.first_line_indent= Cm(1.25)
+    pt_f.space_after = Pt(15)
+    pt_f.space_before = Pt(0)
+
+
+    p1=document.add_paragraph()
+    p1.add_run(('Начальник ОУКЭ\t' if not report_setings["department_boss_type"] else 'Зам. начальника ОУКЭ')+\
+        '\t\t\t\t\t\t\t'+report_setings["department_boss_name"])
+    p1.runs[0].font.size = Pt(14) #Меняем размер шрифта параграфа
+    pt_f = p1.paragraph_format
+    pt_f.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    pt_f.first_line_indent = Cm(0)
+    pt_f.space_after = Pt(25)
+    pt_f.space_before = Pt(30)
+
+
+    p1=document.add_paragraph()
+    p1.add_run(f'Зав. гр. ТВН ОУКЭ\t\t\t\t\t\t\t{report_setings["group_boss_name"]}')
+    p1.runs[0].font.size = Pt(14) #Меняем размер шрифта параграфа
+    pt_f = p1.paragraph_format
+    pt_f.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    pt_f.first_line_indent = Cm(0)
+    #pt_f.left_indent = Cm(0)
+    pt_f.space_after = Pt(0)
+    pt_f.space_before = Pt(25)
+
+
+
+    document.save(fname)
+    print('memorandum was made')
+
+def length_subsectors(length,tp):
+    lst = []
+    l_s, t_s = length[0], tp[0]
+    for i in range(1,len(length)):
+        if t_s!=tp[i]:
+            lst.append((t_s,abs(length[i-1]-l_s)))
+            t_s = tp[i]
+            l_s = length[i]
+
+    else:
+        lst.append((t_s,abs(length[i]-l_s)))
+
+    return lst
+
+def explanatory(fname, okgt_info, vl_info, rpa_info, report_setings, calc_results, sectorsFig, rpa_liks):
+    document = Document("docx_templates/explanatory_note.docx")
+
+    style = document.styles['Normal'] # Берём стиль Нормальный
+    f0 = style.font # Переменная для изменения параметров стиля
+    f0.name = 'Arial' # Шрифт
+    f0.size = Pt(12) # Размер шрифта
+    document.styles['Normal'].paragraph_format.line_spacing = 1
+
+    tables_count = len(rpa_info)
+
+    p1=document.add_paragraph()
+    p1.add_run(f'Исходные данные для расчета допустимого теплового импульса представлены в табл.1-{tables_count} и на рис.1-{tables_count}.')
+    p1.runs[0].font.size = Pt(12) #Меняем размер шрифта параграфа
+    pt_f = p1.paragraph_format
+    pt_f.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    pt_f.first_line_indent = Cm(1.25)
+    #pt_f.left_indent = Cm(0)
+    pt_f.space_after = Pt(5)
+    pt_f.space_before = Pt(0)
+
+    for i, ((vl_name,ps_name), rpa) in enumerate(rpa_info.items()):
+        rpa_settings_table(document, i+1, vl_name, ps_name, rpa, report_setings, font_size=10, font_name='Arial')
+
+
+    p1=document.add_paragraph()
+    p1.add_run(('Распределение токов ОКЗ по ВЛ представлено в виде кривых, отображающих составляющие '
+        'тока ОКЗ со стороны питающих концов ВЛ и кривой суммарного тока ОКЗ. Кривые распределения тока '
+        'строятся на основании расчета тока ОКЗ при замыкании в заданных точках. '
+        f'Кривые распределения тока ОКЗ по ВЛ представлены на рис.1-{tables_count}.'))
+    p1.runs[0].font.size = Pt(12) #Меняем размер шрифта параграфа
+    pt_f = p1.paragraph_format
+    pt_f.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    pt_f.first_line_indent = Cm(1.25)
+    #pt_f.left_indent = Cm(0)
+    pt_f.space_after = Pt(5)
+    pt_f.space_before = Pt(12)
+
+    for i, val in enumerate(rpa_liks.values()):
+        vl_name = val['vl_combo'].currentText()
+        ps_name = val['ps_combo'].currentText()
+        val['figure'].set_size_inches(17, 5,forward=True) # Изменяем размер сохраняемого графика
+        val['figure'].savefig(f'figures/ssc_{i}.jpg', format='jpg', dpi=100) # Cохраняем графики
+        im = Image.open(f'figures/ssc_{i}.jpg')
+        width, height = im.size
+        im.crop((130,0,width-130,height)).save(f'figures/ssc_{i}.jpg')
+        document.add_picture(f'figures/ssc_{i}.jpg', width=Inches(6.5))
+
+        p1=document.add_paragraph()
+        p1.add_run(f'Рис.{i+1} – Распределение тока ОКЗ по проводам {vl_name} от {ps_name}')
+        p1.runs[0].font.size = Pt(12) #Меняем размер шрифта параграфа
+        pt_f = p1.paragraph_format
+        pt_f.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        pt_f.first_line_indent = Cm(0)
+        #pt_f.left_indent = Cm(0)
+        pt_f.space_after = Pt(0)
+        pt_f.space_before = Pt(0)
+
+    p1=document.add_paragraph(style=document.styles['Heading 2'])
+    p1.add_run('Определение теплового импульса в ОКГТ')
+
+    current_fig = tables_count+1
+    fig_count = len(sectorsFig)+tables_count
+
+    p1=document.add_paragraph()
+    p1.add_run(('По результатам расчета строятся кривые распределения теплового импульса '
+        f'в ОКГТ (W=f(№опор)), приведенные на рис. {current_fig}-{fig_count}. В скобках указываются параметры '
+        'про-веряемого ОКГТ: сопротивление постоянному току RDC и тепловой импульс W.'))
+    p1.runs[0].font.size = Pt(12) #Меняем размер шрифта параграфа
+    pt_f = p1.paragraph_format
+    pt_f.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    pt_f.first_line_indent = Cm(1.25)
+    #pt_f.left_indent = Cm(0)
+    pt_f.space_after = Pt(5)
+    pt_f.space_before = Pt(0)
+
+    i=-1
+    for (n,k),val in calc_results.items():
+        for sector in val["sectors"]:
+            if sector[1] != "single_dielectric":
+                i+=1
+                sectorsFig[sector][0].set_size_inches(17, 5,forward=True) 
+                sectorsFig[sector][0].savefig(f'figures/w_{i}.jpg', format='jpg', dpi=100) 
+                im = Image.open(f'figures/w_{i}.jpg')
+                width, height = im.size
+                im.crop((130,0,width-130,height)).save(f'figures/w_{i}.jpg')
+                document.add_picture(f'figures/w_{i}.jpg', width=Inches(6.5))
+
+                st, ed = sector[2:4]
+                fig_title = f'Рис.{current_fig+i} – Распределение теплового импульса в ОКГТ на ветви {n} - {k}, участке {sector[0]} '
+                s = []
+                for okgt_tp, length in length_subsectors(val["L"][st:ed],val["conductor"][st:ed]):
+                    if k_conductors.get(okgt_tp,{}).get("Bsc",None) is not None:
+                        s.append(f'{round(length,3)} км - Rdc={round(k_conductors[okgt_tp]["R0"],3)} Ом/км, W={int(k_conductors[okgt_tp]["Bsc"])} кА\u00B2·c')
+                
+                if s:
+                   fig_title += '(' + '; '.join(s) + ')'
+
+                p1=document.add_paragraph()
+                p1.add_run(fig_title)
+                p1.runs[0].font.size = Pt(12) #Меняем размер шрифта параграфа
+                pt_f = p1.paragraph_format
+                pt_f.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                pt_f.first_line_indent = Cm(0)
+                #pt_f.left_indent = Cm(0)
+                pt_f.space_after = Pt(0)
+                pt_f.space_before = Pt(0)
 
     
+    p1=document.add_paragraph(style=document.styles['Heading 2'])
+    p1.add_run('Рекомендации по выбору ОКГТ по условию допустимого теплового импульса')
+
+    p1=document.add_paragraph()
+    p1.add_run(('В результате выполненных расчётов определены области применения ОКГТ '
+        'с допустимым тепловым импульсом не менее и сопротивлением постоянному току не более указанных в табл.2.'))
+    p1.runs[0].font.size = Pt(12) #Меняем размер шрифта параграфа
+    pt_f = p1.paragraph_format
+    pt_f.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    pt_f.first_line_indent = Cm(1.25)
+    #pt_f.left_indent = Cm(0)
+    pt_f.space_after = Pt(6)
+    pt_f.space_before = Pt(0)
+
+    p1=document.add_paragraph()
+    p1.add_run(f'Табл. {tables_count+1} – Рекомендации по выбору ОКГТ')
+    p1.runs[0].font.size = Pt(10) #Меняем размер шрифта параграфа
+    pt_f = p1.paragraph_format
+    pt_f.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    pt_f.first_line_indent = Cm(0.25)
+    pt_f.space_after = Pt(0)
+    pt_f.space_before = Pt(0)
+
+    description_settings(document,okgt_info, vl_info, calc_results, font_size=10, font_name='Arial')
 
 
-    document.save("docx_templates/test_memorandum.docx")
-    print('memorandum was made')
+    p1=document.add_paragraph(style=document.styles['Heading 2'])
+    p1.add_run('Рекомендации по выбору ОКГТ по условию устойчивости к прямому удару молнии')
+
+    p1=document.add_paragraph()
+    p1.add_run(('Выбор типа ОКГТ по условию устойчивости к прямому удару молнии произво-дится в '
+        'соответствии с «Инструкцией по устройству молниезащиты зданий, '
+        'сооружений и промышленных коммуникаций», СО 153-34.21.122-2003, РФ.'))
+    p1.runs[0].font.size = Pt(12) #Меняем размер шрифта параграфа
+    pt_f = p1.paragraph_format
+    pt_f.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    pt_f.first_line_indent = Cm(1.25)
+    #pt_f.left_indent = Cm(0)
+    pt_f.space_after = Pt(0)
+    pt_f.space_before = Pt(0)
+
+    p1=document.add_paragraph()
+    p1.add_run('Принимаем III уровень защиты от прямого удара молнии с коэффициентом надежности равным 0,90, имеющим следующие требования:')
+    p1.runs[0].font.size = Pt(12) #Меняем размер шрифта параграфа
+    pt_f = p1.paragraph_format
+    pt_f.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    pt_f.first_line_indent = Cm(1.25)
+    #pt_f.left_indent = Cm(0)
+    pt_f.space_after = Pt(0)
+    pt_f.space_before = Pt(0)
+
+    p1=document.add_paragraph()
+    p1.add_run('- амплитуда тока молнии не менее 100 кА;')
+    p1.runs[0].font.size = Pt(12) #Меняем размер шрифта параграфа
+    pt_f = p1.paragraph_format
+    pt_f.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    pt_f.first_line_indent = Cm(1.25)
+    #pt_f.left_indent = Cm(0)
+    pt_f.space_after = Pt(0)
+    pt_f.space_before = Pt(0)
+
+    p1=document.add_paragraph()
+    p1.add_run('- заряд импульса молнии не менее 50 Кл.')
+    p1.runs[0].font.size = Pt(12) #Меняем размер шрифта параграфа
+    pt_f = p1.paragraph_format
+    pt_f.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    pt_f.first_line_indent = Cm(1.25)
+    #pt_f.left_indent = Cm(0)
+    pt_f.space_after = Pt(0)
+    pt_f.space_before = Pt(0)
+
+    p1=document.add_paragraph(style=document.styles['Heading 2'])
+    p1.add_run('Рекомендации по выбору заземляющего проводника для присоединения ОКГТ к опорам ВЛ')
+
+    p1=document.add_paragraph()
+    p1.add_run(('Заземляющий проводник для присоединения ОКГТ к опорам ВЛ должен вы-держивать тепловой импульс, '
+        'создаваемый частью тока ОКЗ стекающей с опоры в ОКГТ. При расчете теплового импульса в ОКГТ учитывается, '
+        'что ток растекается по ОКГТ в обе стороны от опоры. Следовательно, заземляющий проводник должен вы-держивать тепловой импульс, '
+        'превышающий допустимый тепловой импульс ОКГТ, для присоединения которого он служит.'))
+    p1.runs[0].font.size = Pt(12) #Меняем размер шрифта параграфа
+    pt_f = p1.paragraph_format
+    pt_f.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    pt_f.first_line_indent = Cm(1.25)
+    #pt_f.left_indent = Cm(0)
+    pt_f.space_after = Pt(0)
+    pt_f.space_before = Pt(0)
+
+    p1=document.add_paragraph()
+    p1.add_run(('Определение допустимого теплового импульса для заземляющего проводника производится '
+        'исходя из допустимой величины тока КЗ в соответствии с «Методиче-скими указаниями по расчету '
+        'термической устойчивости грозозащитных тросов воз-душных линий электропередачи», №5290тм-т1, «Энергосетьпроект», Киев, 1976 г.'))
+    p1.runs[0].font.size = Pt(12) #Меняем размер шрифта параграфа
+    pt_f = p1.paragraph_format
+    pt_f.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    pt_f.first_line_indent = Cm(1.25)
+    #pt_f.left_indent = Cm(0)
+    pt_f.space_after = Pt(0)
+    pt_f.space_before = Pt(0)
+
+    p1=document.add_paragraph()
+    p1.add_run((f'Рекомендуемые марки заземляющего проводника для заземления ОКГТ при-ведены в табл. {tables_count+2}.'))
+    p1.runs[0].font.size = Pt(12) #Меняем размер шрифта параграфа
+    pt_f = p1.paragraph_format
+    pt_f.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    pt_f.first_line_indent = Cm(1.25)
+    #pt_f.left_indent = Cm(0)
+    pt_f.space_after = Pt(6)
+    pt_f.space_before = Pt(0)
+
+    p1=document.add_paragraph()
+    p1.add_run(f'Табл. {tables_count+2} – Рекомендации по выбору заземляющего проводника')
+    p1.runs[0].font.size = Pt(10) #Меняем размер шрифта параграфа
+    pt_f = p1.paragraph_format
+    pt_f.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    pt_f.first_line_indent = Cm(0.25)
+    pt_f.space_after = Pt(0)
+    pt_f.space_before = Pt(0)
+
+    grounded_wires(document, calc_results)
+    
+
+    document.save(fname)
+    print('explanatory was made')
 
     

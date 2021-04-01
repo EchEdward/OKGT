@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import QApplication,QMainWindow,QWidget,QVBoxLayout,QHBoxLa
     QScrollArea,QSizePolicy,QSplitter, QSizePolicy, qApp, QAction,\
     QMessageBox,QFileDialog, QErrorMessage, QDoubleSpinBox, QSpacerItem, QLineEdit, QItemDelegate, QProgressBar,\
     QTabWidget, QComboBox, QGridLayout, QCheckBox, QSpinBox, QDoubleSpinBox, QSpacerItem, QProgressDialog,\
-    QButtonGroup, QRadioButton
+    QButtonGroup, QRadioButton, QTextEdit
 
 from PyQt5.QtGui import QPixmap, QPalette, QBrush, QImage, QIcon, QTransform, QStandardItemModel,QStandardItem,\
      QDoubleValidator, QValidator, QCloseEvent, QColor
@@ -29,7 +29,7 @@ from calc_okgt import k_supports, k_conductors, main_calc, I_sc_corector
 
 from initial_data2 import okgt_info, vl_info, ps_info, rpa_info
 
-from report_creator import memorandum
+from report_creator import memorandum, explanatory
 
 import traceback
 
@@ -87,6 +87,7 @@ class MyWindow(QMainWindow):
         super(MyWindow,self).__init__(parent)
 
         self.setSettings()
+        self.setAddDirs()
 
         self.currentFilePath = ''
         self.currentFileName = 'Новый файл'
@@ -164,7 +165,7 @@ class MyWindow(QMainWindow):
         except Exception:
             self.path_home = ""
 
-        last_path_keys = ['id_save_as','id_open']
+        last_path_keys = ['id_save_as','id_open','memorandum_path','explanatory_path']
         report_settings = {
             "show_arc_pause":True,
             "show_Irpa":True,
@@ -201,6 +202,14 @@ class MyWindow(QMainWindow):
         if e.key() == Qt.Key_Control:
             self.cntr_pr["trig"] = False
 
+    def setAddDirs(self):
+        for curren_dir in ['figures']:
+            if (os.path.exists(curren_dir) and not os.path.isdir(curren_dir)) or not os.path.exists(curren_dir):
+                try:
+                    os.mkdir(curren_dir)
+                except OSError:
+                    print ("Error generate dir "+curren_dir)
+
     
     def ReportTab(self):
         Vlayout = QVBoxLayout()
@@ -216,8 +225,8 @@ class MyWindow(QMainWindow):
         Vlayout.addWidget(recipients)
 
         Vlayout.addWidget(QLabel('Название проекта:'))
-        project_name = QLineEdit()
-        #project_name.setMaximumHeight(70)
+        project_name = QTextEdit()
+        project_name.setMaximumHeight(70)
         Vlayout.addWidget(project_name)
 
         rb1 = QRadioButton('Начальник')
@@ -279,7 +288,7 @@ class MyWindow(QMainWindow):
             "show_arc_pause": True if self.ReportSetingsForm["show_arc_pause"].checkState()==Qt.Checked else False,
             "show_Irpa": True if self.ReportSetingsForm["show_Irpa"].checkState()==Qt.Checked else False,
             "recipients": self.ReportSetingsForm["recipients"].text(),
-            "project_name": self.ReportSetingsForm["project_name"].text(),
+            "project_name": self.ReportSetingsForm["project_name"].toPlainText(),
             "department_boss_name": self.ReportSetingsForm["department_boss_name"].text(),
             "group_boss_name": self.ReportSetingsForm["group_boss_name"].text(),
             "department_boss_type": bool(self.ReportSetingsForm["department_boss_type"].checkedId())
@@ -301,17 +310,55 @@ class MyWindow(QMainWindow):
 
     
     def CreateMemorandumDoc(self):
-        report_setings = self.getReportSettings()
-        okgt_info_new, _, vl_info_new,  rpa_info_new = self.ReadTables()
-
-        #self.calc_results = None
-        #self.sectorsFig = {}
-
         try:
-            memorandum(okgt_info_new, vl_info_new, rpa_info_new, self.calc_results, report_setings)
+            fname = QFileDialog.getSaveFileName(self, 'Сохранить служебную записку',\
+                 os.path.join(self.main_settings['memorandum_path'],self.currentFileName+' Служебная записка'),'*.docx')
+            if fname[0] == "" and fname[1] == "": return
+            fname = fname[0]
+            self.main_settings['memorandum_path'] = os.path.dirname(fname)
+            #self.calc_results = None
+            #self.sectorsFig = {}
 
-        except Exception:
-            print(traceback.format_exc())
+            report_setings = self.getReportSettings()
+            okgt_info_new, _, vl_info_new,  rpa_info_new = self.ReadTables()
+
+            memorandum(fname, okgt_info_new, vl_info_new, rpa_info_new, self.calc_results, report_setings)
+            
+        except Exception as ex:
+            ems = QErrorMessage(self)
+            ems.setWindowTitle('Возникла ошибка')
+            ems.showMessage('Не получилось сохранить файл. '+
+                            'Проверьте введённые данные а также сохраняете ли вы уже в открытый файл.'+str(ex))
+        else:
+            QMessageBox.information(self, 'Сохранение служебной записки','Операция прошла успешно.',
+                                          buttons=QMessageBox.Ok,
+                                          defaultButton=QMessageBox.Ok)
+
+
+    def CreateExplanatoryDoc(self):
+        try:
+            fname = QFileDialog.getSaveFileName(self, 'Сохранить пояснительную записку',\
+                 os.path.join(self.main_settings['explanatory_path'],self.currentFileName+' Пояснительная записка'),'*.docx')
+            if fname[0] == "" and fname[1] == "": return
+            fname = fname[0]
+            self.main_settings['explanatory_path'] = os.path.dirname(fname)
+            #self.calc_results = None
+            #self.sectorsFig = {}
+
+            report_setings = self.getReportSettings()
+            okgt_info_new, _, vl_info_new,  rpa_info_new = self.ReadTables()
+
+            explanatory(fname, okgt_info_new, vl_info_new, rpa_info_new, report_setings, self.calc_results, self.sectorsFig,self.rpa_liks)
+            
+        except Exception as ex:
+            ems = QErrorMessage(self)
+            ems.setWindowTitle('Возникла ошибка')
+            ems.showMessage('Не получилось сохранить файл. '+
+                            'Проверьте введённые данные а также сохраняете ли вы уже в открытый файл.'+str(ex))
+        else:
+            QMessageBox.information(self, 'Сохранение пояснительной записки','Операция прошла успешно.',
+                                          buttons=QMessageBox.Ok,
+                                          defaultButton=QMessageBox.Ok)
         
     
 
@@ -418,6 +465,13 @@ class MyWindow(QMainWindow):
         save_memorandum.setStatusTip('Создать служебную записку')
         save_memorandum.triggered.connect(self.CreateMemorandumDoc)
         calcMenu.addAction(save_memorandum)
+
+        save_explanatory = QAction( '&Создать пояснительную записку', self) #QIcon('exit.png'),
+        #save_memorandum.setShortcut("Ctrl+R")
+        save_explanatory.setStatusTip('Создать пояснительнуюю записку')
+        save_explanatory.triggered.connect(self.CreateExplanatoryDoc)
+        calcMenu.addAction(save_explanatory)
+
 
         settingsMenu = menubar.addMenu('&Настройки')
 
@@ -937,21 +991,26 @@ class MyWindow(QMainWindow):
         for val in self.calc_results.values():
             for sector in val["sectors"]:
                 if sector[1] != 'single_dielectric':
-                    st, ed = sector[2:]
+                    st, ed = sector[2:4]
 
                     fg = plt.figure(dpi=75) # Создаём фигуру графика 
                     fg_widget = FigureCanvas(fg) # Помещаем фигуру в контейнер
                     ax = fg.add_subplot(111) #
-                    ax.plot(val["L"][st:ed],val["B"][st:ed],'r',label="Bрасч.")
-                    ax.plot(val["L"][st:ed],val["Bmax"][st:ed],'b',label="Вмах")
-                    ax.set_xlabel('L, км',fontsize=self.font_s) 
-                    ax.set_ylabel('B, кА^2*c',fontsize=self.font_s)
+                    ax.plot(val["L"][st:ed],val["B"][st:ed],'r',label="Расчетный тепловой импульс")
+                    ax.plot(val["L"][st:ed],val["Bmax"][st:ed],'b',label="Допустимый тепловой импульс")
+                    ax.set_xlabel('Растояние, км',fontsize=self.font_s) 
+                    ax.set_ylabel('Тепловой импульс, кА\u00B2·c',fontsize=self.font_s)
                     ax.set_title(f"{sector[0]}",fontsize=self.font_s)
                     ax.tick_params(labelsize=self.font_s)
+                    ax.legend(frameon=False,fontsize=self.font_s) # Выводим легенду графика
                     ax.set_xlim([val["L"][st],val["L"][ed-1]])
                     ax.grid(True)
 
                     self.Rez_Tabs.addTab(fg_widget, f"{sector[0]}")
+
+                    if sector[4]:
+                        self.Rez_Tabs.tabBar().setTabTextColor(self.Rez_Tabs.indexOf(fg_widget),QColor(255,0,0))
+                    
 
                     self.resFig[fg_widget] = (fg,ax)
                     self.sectorsFig[sector] = (fg,ax)

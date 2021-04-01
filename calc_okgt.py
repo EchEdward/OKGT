@@ -1436,7 +1436,7 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30, callback=simple_call
             "conductor":[],
             "links":[],
             "sectors":[],
-            'okgt_types':set(),
+            'okgt_types':[],
             'length_to_ps_lst': length_to_ps_lst
         }
         j_s = okgt_nodes[n][1]
@@ -1450,12 +1450,16 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30, callback=simple_call
         sector, tp, st = okgt_max[b]["sector_link"], okgt_max[b]["type"], 0
         
         ed = 0
+        bad = False
+        okgt_t_s = set()
         for j in range(b,j_e):
             Bmax = k_conductors.get(okgt_max[j]['conductor'],{}).get("Bsc",None)
-            result[(n,k)]['okgt_types'].add(okgt_max[j]['conductor'])
+            okgt_t_s.add(okgt_max[j]['conductor'])
             #result[(n,k)]["B"]+= [B[j],B[j]]   #[B[j]/10**6,B[j]/10**6] 
             result[(n,k)]["B"]+= [B[j]/10**6,B[j]/10**6] 
             result[(n,k)]["Bmax"]+=[Bmax,Bmax]
+
+            bad = True if B[j]/10**6>(Bmax if Bmax is not None else -float('inf')) else bad
 
             result[(n,k)]["conductor"]+=[okgt_max[j]['conductor'],okgt_max[j]['conductor']]
             result[(n,k)]["type"]+=[okgt_max[j]["type"],okgt_max[j]["type"]]
@@ -1466,15 +1470,21 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30, callback=simple_call
             result[(n,k)]["L"].append(dl)
 
             if okgt_max[j]["sector_link"]!=sector:
-                result[(n,k)]["sectors"].append((sector,tp,st,ed))
+                result[(n,k)]["sectors"].append((sector,tp,st,ed,bad))
                 sector = okgt_max[j]["sector_link"]
                 tp = okgt_max[j]["type"]
                 st = ed
+                bad = False
+                result[(n,k)]['okgt_types'].append(okgt_t_s)
+                okgt_t_s = set()
 
             if j == j_e-1:
-                result[(n,k)]["sectors"].append((sector,tp,st,ed+2))
+                result[(n,k)]["sectors"].append((sector,tp,st,ed+2,bad))
                 sector = okgt_max[j]["sector_link"]
                 tp = okgt_max[j]["type"]
+                bad = False
+                result[(n,k)]['okgt_types'].append(okgt_t_s)
+                okgt_t_s = set()
                 
             ed+=2
 
