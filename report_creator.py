@@ -13,6 +13,8 @@ from docx.enum.text import WD_LINE_SPACING
 
 from PIL import Image
 
+import os
+
 from calc_okgt import k_conductors
 
 
@@ -432,16 +434,19 @@ def grounded_wires(doc, calc_results, font_size=12, font_name="Times"):
     
 
 
-def memorandum(fname, okgt_info, vl_info, rpa_info, calc_results, report_setings):
+def memorandum(fname, path_midle_files, okgt_info, vl_info, rpa_info, calc_results, report_setings):
     doc = DocxTemplate("docx_templates/memorandum.docx")
     context = { 
         'recipients' : R('\n'.join([i.strip() for i in report_setings['recipients'].split(';')])),
         "project_name" : report_setings['project_name']
     }
     doc.render(context)
-    doc.save("docx_templates/midle_memorandum.docx")
 
-    document = Document("docx_templates/midle_memorandum.docx")
+    midle_docx_file = os.path.join(path_midle_files,'midle_memorandum.docx')       
+    
+    doc.save(midle_docx_file)
+
+    document = Document(midle_docx_file)
     #document = Document()
 
     # Наследуем стиль и изменяем его
@@ -552,7 +557,7 @@ def length_subsectors(length,tp):
 
     return lst
 
-def explanatory(fname, okgt_info, vl_info, rpa_info, report_setings, calc_results, sectorsFig, rpa_liks):
+def explanatory(fname, path_midle_files, okgt_info, vl_info, rpa_info, report_setings, calc_results, sectorsFig, rpa_liks):
     document = Document("docx_templates/explanatory_note.docx")
 
     style = document.styles['Normal'] # Берём стиль Нормальный
@@ -593,12 +598,13 @@ def explanatory(fname, okgt_info, vl_info, rpa_info, report_setings, calc_result
     for i, val in enumerate(rpa_liks.values()):
         vl_name = val['vl_combo'].currentText()
         ps_name = val['ps_combo'].currentText()
+        midle_img = os.path.join(path_midle_files,f'figures/ssc_{i}.jpg')
         val['figure'].set_size_inches(17, 5,forward=True) # Изменяем размер сохраняемого графика
-        val['figure'].savefig(f'figures/ssc_{i}.jpg', format='jpg', dpi=100) # Cохраняем графики
-        im = Image.open(f'figures/ssc_{i}.jpg')
+        val['figure'].savefig(midle_img, format='jpg', dpi=100) # Cохраняем графики
+        im = Image.open(midle_img)
         width, height = im.size
-        im.crop((130,0,width-130,height)).save(f'figures/ssc_{i}.jpg')
-        document.add_picture(f'figures/ssc_{i}.jpg', width=Inches(6.5))
+        im.crop((130,0,width-130,height)).save(midle_img)
+        document.add_picture(midle_img, width=Inches(6.5))
 
         p1=document.add_paragraph()
         p1.add_run(f'Рис.{i+1} – Распределение тока ОКЗ по проводам {vl_name} от {ps_name}')
@@ -633,12 +639,13 @@ def explanatory(fname, okgt_info, vl_info, rpa_info, report_setings, calc_result
         for sector in val["sectors"]:
             if sector[1] != "single_dielectric":
                 i+=1
+                midle_img = os.path.join(path_midle_files,f'figures/w_{i}.jpg')
                 sectorsFig[sector][0].set_size_inches(17, 5,forward=True) 
-                sectorsFig[sector][0].savefig(f'figures/w_{i}.jpg', format='jpg', dpi=100) 
-                im = Image.open(f'figures/w_{i}.jpg')
+                sectorsFig[sector][0].savefig(midle_img, format='jpg', dpi=100) 
+                im = Image.open(midle_img)
                 width, height = im.size
-                im.crop((130,0,width-130,height)).save(f'figures/w_{i}.jpg')
-                document.add_picture(f'figures/w_{i}.jpg', width=Inches(6.5))
+                im.crop((130,0,width-130,height)).save(midle_img)
+                document.add_picture(midle_img, width=Inches(6.5))
 
                 st, ed = sector[2:4]
                 fig_title = f'Рис.{current_fig+i} – Распределение теплового импульса в ОКГТ на ветви {n} - {k}, участке {sector[0]} '

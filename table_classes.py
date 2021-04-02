@@ -1,7 +1,8 @@
 # pylint: disable=E0611
 # pylint: disable=E1101
 from PyQt5.QtWidgets import QTableWidgetItem, QTableWidget, QItemDelegate, QComboBox, QLineEdit,\
-    QCheckBox, QWidget, QHBoxLayout, QButtonGroup, QSizePolicy
+    QCheckBox, QWidget, QHBoxLayout, QButtonGroup, QSizePolicy, QDialog, QVBoxLayout,QDialogButtonBox,\
+    QLabel
 from PyQt5.QtGui import  QValidator,  QColor
 from PyQt5.QtCore import Qt
 
@@ -2110,3 +2111,37 @@ class LineEditManager():
 
         #obj.clearFocus()
         #print("test")
+
+
+class CustomDialog(QDialog):
+    def __init__(self, lst, parent=None):
+        QDialog.__init__(self, parent)
+        self.setWindowTitle("Способ чтения")
+
+        self.setFixedSize(180,95)
+        
+        vl = QVBoxLayout()
+
+        self.cb = QComboBox()
+        self.cb.addItems(lst)
+
+        btn_box = QDialogButtonBox()
+        btn_box.addButton("Столбцы 1, 2", QDialogButtonBox.ActionRole)
+        btn_box.addButton("Столбцы 1, 3", QDialogButtonBox.ActionRole)
+
+        vl.addWidget(QLabel("Лист:"))
+        vl.addWidget(self.cb)
+        vl.addWidget(btn_box)
+        self.setLayout(vl)
+
+        btn_box.clicked.connect(self.clickEvent)
+
+
+    def clickEvent(self,btn):
+        if btn.text() == "Столбцы 1, 2":
+            self.done(2)
+        elif btn.text() == "Столбцы 1, 3":
+            self.done(3)
+
+       
+        

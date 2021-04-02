@@ -15,13 +15,16 @@ import sys
 import os
 
 from table_classes import traceback_erors, OkgtSectorTable, OkgtSingleTable, PSTable, NodeTable, LineEditManager,\
-    VlParamsTable, VlSectorTable, VlPsParamsTable, VlCommonChainsTable, RPASettingsTable, ShortCircuitLineTable, UserComboBox
+    VlParamsTable, VlSectorTable, VlPsParamsTable, VlCommonChainsTable, RPASettingsTable, ShortCircuitLineTable,\
+    UserComboBox, CustomDialog
 
 
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from matplotlib.ticker import FuncFormatter
 import matplotlib.pyplot as plt
+
+from openpyxl import load_workbook
 
 import json
 
@@ -87,11 +90,11 @@ class MyWindow(QMainWindow):
         super(MyWindow,self).__init__(parent)
 
         self.setSettings()
-        self.setAddDirs()
 
         self.currentFilePath = ''
         self.currentFileName = 'Новый файл'
         self.setWindowTitle(f"OKGT - {self.currentFileName}")
+        self.setWindowIcon(QIcon("icon.ico"))
 
         desktop = QApplication.desktop()
         wd = desktop.width()
@@ -158,6 +161,8 @@ class MyWindow(QMainWindow):
         self.calc_results = None
         self.sectorsFig = {}
 
+    
+
 
     def setSettings(self):
         try:
@@ -165,7 +170,30 @@ class MyWindow(QMainWindow):
         except Exception:
             self.path_home = ""
 
-        last_path_keys = ['id_save_as','id_open','memorandum_path','explanatory_path']
+        try:
+            current_os = sys.platform
+            if current_os == "win32":
+                self.path_midle_files = os.path.expanduser('~\\AppData\\Roaming\\')
+            elif current_os.startswith('linux'):
+                self.path_midle_files = os.path.expanduser('~\\')
+            elif current_os == 'darwin':
+                self.path_midle_files = os.path.expanduser('~\\')
+        except Exception:
+            self.path_midle_files = ''
+
+        
+
+        for some_dir in ['okgt','okgt\\figures']:
+            curren_dir = os.path.join(self.path_midle_files,some_dir)
+            if (os.path.exists(curren_dir) and not os.path.isdir(curren_dir)) or not os.path.exists(curren_dir):
+                try:
+                    os.mkdir(curren_dir)
+                except OSError:
+                    print ("Error generate dir "+curren_dir)
+
+        self.path_midle_files = os.path.join(self.path_midle_files,'okgt')
+
+        last_path_keys = ['id_save_as','id_open','memorandum_path','explanatory_path','excel_open']
         report_settings = {
             "show_arc_pause":True,
             "show_Irpa":True,
@@ -175,7 +203,7 @@ class MyWindow(QMainWindow):
             "group_boss_name":'',
         }
         try: 
-            with open('main_settings.json', "r" ) as f:
+            with open(os.path.join(self.path_midle_files,'main_settings.json'), "r" ) as f:
                 self.main_settings = {i:j for i,j in json.load(f).items()}
             
         except Exception:
@@ -189,6 +217,7 @@ class MyWindow(QMainWindow):
                 if setting not in self.main_settings:
                     self.main_settings[setting] = val    
 
+    
 
     def on_timeout(self):
         self.cntr_pr["trig"] = False
@@ -202,13 +231,6 @@ class MyWindow(QMainWindow):
         if e.key() == Qt.Key_Control:
             self.cntr_pr["trig"] = False
 
-    def setAddDirs(self):
-        for curren_dir in ['figures']:
-            if (os.path.exists(curren_dir) and not os.path.isdir(curren_dir)) or not os.path.exists(curren_dir):
-                try:
-                    os.mkdir(curren_dir)
-                except OSError:
-                    print ("Error generate dir "+curren_dir)
 
     
     def ReportTab(self):
@@ -322,7 +344,9 @@ class MyWindow(QMainWindow):
             report_setings = self.getReportSettings()
             okgt_info_new, _, vl_info_new,  rpa_info_new = self.ReadTables()
 
-            memorandum(fname, okgt_info_new, vl_info_new, rpa_info_new, self.calc_results, report_setings)
+            
+
+            memorandum(fname, self.path_midle_files, okgt_info_new, vl_info_new, rpa_info_new, self.calc_results, report_setings)
             
         except Exception as ex:
             ems = QErrorMessage(self)
@@ -348,7 +372,7 @@ class MyWindow(QMainWindow):
             report_setings = self.getReportSettings()
             okgt_info_new, _, vl_info_new,  rpa_info_new = self.ReadTables()
 
-            explanatory(fname, okgt_info_new, vl_info_new, rpa_info_new, report_setings, self.calc_results, self.sectorsFig,self.rpa_liks)
+            explanatory(fname, self.path_midle_files, okgt_info_new, vl_info_new, rpa_info_new, report_setings, self.calc_results, self.sectorsFig,self.rpa_liks)
             
         except Exception as ex:
             ems = QErrorMessage(self)
@@ -471,6 +495,12 @@ class MyWindow(QMainWindow):
         save_explanatory.setStatusTip('Создать пояснительнуюю записку')
         save_explanatory.triggered.connect(self.CreateExplanatoryDoc)
         calcMenu.addAction(save_explanatory)
+
+        get_excel_data = QAction( '&Загрузить токи КЗ из Excel', self) #QIcon('exit.png'),
+        #save_memorandum.setShortcut("Ctrl+R")
+        get_excel_data.setStatusTip('Загрузить токи КЗ из Excel')
+        get_excel_data.triggered.connect(self.getExcelIscData)
+        calcMenu.addAction(get_excel_data)
 
 
         settingsMenu = menubar.addMenu('&Настройки')
@@ -647,6 +677,56 @@ class MyWindow(QMainWindow):
         elif ind == 3:
             self.remove_rpa_tab()
             print("Remove RPA")
+
+    
+    def getExcelIscData(self):
+        try:
+            ind = self.mainTabWidget.currentIndex()
+            if ind == 3:
+                ind = self.Rpa_Tabs.currentIndex()
+                if ind>-1:
+                    fname = QFileDialog.getOpenFileName(self, 'Открыть файл Excel', self.main_settings['excel_open'],"*.xlsx")
+                    if fname[0] == "" and  fname[1] == "": return
+                    fname = fname[0]
+                    
+                    wb = load_workbook(filename = fname)
+                    
+                    sheets = wb.sheetnames
+                    
+                    Message = CustomDialog(list(sheets),self)
+                    reply = Message.exec()
+                    
+                    if reply != 0:
+                        Kat = wb[Message.cb.currentText()]
+                        j = 1
+                        I_sc, L_sc = [], []
+                        while type(Kat.cell(row=j,column=1).value) in (int,float) and type(Kat.cell(row=j,column=reply).value) in (int,float):
+                            L_sc.append(round(Kat.cell(row=j,column=1).value,3))
+                            I_sc.append(round(Kat.cell(row=j,column=reply).value,3))
+                            j+=1
+
+                        if I_sc and L_sc:
+                            wd = self.Rpa_Tabs.widget(ind)
+                            data = self.rpa_liks[wd]
+                            data['sc_table'].clear_table()
+                            data['sc_table'].write_table(1,{1:{"I_sc":I_sc,"L_sc":L_sc}})
+
+                            self.refreshFigure(wd,{"I_sc":I_sc,"L_sc":L_sc})
+                        else:
+                            raise Exception("Выбранные столбцы не содержат цифр")
+
+
+        except Exception as ex:
+            ems = QErrorMessage(self)
+            ems.setWindowTitle('Возникла ошибка')
+            ems.showMessage(f'Не получилось прочитать файл Excel ({str(ex)})')
+        else:
+            QMessageBox.information(self, 'Чтение Excel','Операция прошла успешно.',
+                                          buttons=QMessageBox.Ok,
+                                          defaultButton=QMessageBox.Ok)
+
+        
+                
         
 
 
@@ -1286,7 +1366,7 @@ class MyWindow(QMainWindow):
         #Message.addButton('Сохранить', QMessageBox.ActionRole)
         reply = Message.exec()
         if reply == 0:  
-            with open( 'main_settings.json', "w", encoding="utf8") as f:
+            with open(os.path.join(self.path_midle_files,'main_settings.json'), "w", encoding="utf8") as f:
                 json.dump(self.main_settings,f, indent=4)
             qApp.quit()
         elif reply == 1:

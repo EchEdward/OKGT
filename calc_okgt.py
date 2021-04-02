@@ -1493,7 +1493,7 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30, callback=simple_call
         b = j_e
 
     #print([val['okgt_types'] for val in result.values()])
-    print([val["sectors"] for val in result.values()])
+    #print([val["sectors"] for val in result.values()])
     #print(result)
     return result
 
