@@ -2,7 +2,7 @@
 # pylint: disable=E1101
 from PyQt5.QtWidgets import QTableWidgetItem, QTableWidget, QItemDelegate, QComboBox, QLineEdit,\
     QCheckBox, QWidget, QHBoxLayout, QButtonGroup, QSizePolicy, QDialog, QVBoxLayout,QDialogButtonBox,\
-    QLabel
+    QLabel, QGridLayout, QLayout
 from PyQt5.QtGui import  QValidator,  QColor
 from PyQt5.QtCore import Qt
 
@@ -487,9 +487,7 @@ class TableTempalte(QTableWidget):
         ind = self.currentRow()+1 if self.currentRow() != -1 else self.rows-1
         self.insertRow(ind)
         
-        self.selectionModel().clearSelection()
-        self.setCurrentCell(-1,-1)
-        
+                
         
     @traceback_erors  
     def remove_row(self):
@@ -748,6 +746,9 @@ class NodeTable(TableTempalte):
         self.setItem(ind,1, CustomTableWidgetItem(""))
         self.add_branch(ind)
 
+        self.selectionModel().clearSelection()
+        self.setCurrentCell(-1,-1)
+
     def remove_row(self):
         ind = self.currentRow() if self.currentRow() != -1 else self.rows-1
         self.remove_branch(ind)
@@ -818,6 +819,9 @@ class OkgtSectorTable(TableTempalte):
         self.add_cmb(((0,1,self.separator),),cmb)
         
         self.setComboDependence(ind)
+
+        self.selectionModel().clearSelection()
+        self.setCurrentCell(-1,-1)
 
         
 
@@ -908,6 +912,9 @@ class VlSectorTable(TableTempalte):
         
         self.NodeObj.add_child(((0,1,self.separator),),branch)
         self.SectorObj.add_child(((2,),((1,"ВЛ"),)),okgt_sector)
+
+        self.selectionModel().clearSelection()
+        self.setCurrentCell(-1,-1)
         
     def remove_row(self):
         if self.rows>0:
@@ -1003,6 +1010,9 @@ class VlPsParamsTable(TableTempalte):
         self.setCellWidget(ind,2, side)
 
         self.setItem(ind,3, CustomTableWidgetItem(""))
+
+        self.selectionModel().clearSelection()
+        self.setCurrentCell(-1,-1)
 
     def remove_row(self):
         if self.rows>0:
@@ -1149,6 +1159,9 @@ class VlCommonChainsTable(TableTempalte):
 
         self.setItem(ind,5, CustomTableWidgetItem(""))
         self.setItem(ind,6, CustomTableWidgetItem(""))
+
+        self.selectionModel().clearSelection()
+        self.setCurrentCell(-1,-1)
     
     @traceback_erors
     def remove_row(self):
@@ -1471,6 +1484,9 @@ class VlParamsTable(TableTempalte):
             to_ps.setCheckState(Qt.Unchecked) 
             self.setItem(ind,7, to_ps)
 
+        self.selectionModel().clearSelection()
+        self.setCurrentCell(-1,-1)
+
     def remove_row(self):
         if self.rows>0:
             ind = self.currentRow() if self.currentRow() != -1 else self.rows-1
@@ -1645,6 +1661,9 @@ class OkgtSingleTable(TableTempalte):
         self.setItem(ind,10, CustomTableWidgetItem(""))
         self.setItem(ind,11, CustomTableWidgetItem(""))
 
+        self.selectionModel().clearSelection()
+        self.setCurrentCell(-1,-1)
+
         
 
     def remove_row(self):
@@ -1729,6 +1748,9 @@ class PSTable(TableTempalte):
         self.setItem(ind,0, CustomTableWidgetItem(""))
         self.setItem(ind,1, CustomTableWidgetItem(""))
         self.add_Unique(ind)
+
+        self.selectionModel().clearSelection()
+        self.setCurrentCell(-1,-1)
 
     
      
@@ -2023,11 +2045,7 @@ class LineEditManager():
         self.tab_pages_objs = {}
         self.children_except = {}
 
-        #editingFinished()
-        #textChanged(const QString &text)
-        #textEdited(const QString &text)
-        #.text().strip()
-
+        
     def get_unique_name(self,text):
         lst = [i[len(text):] for i in self.unique_set if text==i[:len(text)]]
         i = 1
@@ -2142,6 +2160,161 @@ class CustomDialog(QDialog):
             self.done(2)
         elif btn.text() == "Столбцы 1, 3":
             self.done(3)
+
+
+class SingleSupportDialog(QDialog):
+    def __init__(self, le_manager, vl_liks, parent=None):
+        QDialog.__init__(self, parent=parent)
+        self.setWindowTitle("КЗ в точке")
+
+        self.le_manager = le_manager
+        self.vl_liks  = vl_liks
+        self.separator = " - "
+        self.state_color = False
+        self.rez = None
+
+        self.setFixedSize(self.width(),self.height())
+        
+        vl = QVBoxLayout()
+
+        settingsGrid = QGridLayout()
+        settingsGrid.addWidget(QLabel('ВЛ:'), 0,0)
+        settingsGrid.addWidget(QLabel('Ветвь:'), 1,0)
+        settingsGrid.addWidget(QLabel('Фаза:'), 2,0)
+        settingsGrid.addWidget(QLabel('Опора:'), 3,0)
+        
+
+        self.vl_name = QComboBox()
+        self.le_manager.add_child(self.vl_name)
+        self.prevVlName = "Нет"
+        self.vl_name.currentTextChanged.connect(self.setVlBranchCombo)
+
+        self.branch = QComboBox()
+        self.branch.currentTextChanged.connect(self.checkSupport)
+
+        self.phase = QComboBox()
+        self.phase.addItems(["A","B","C"])
+        self.dct = {"A":0,"B":1,"C":2}
+
+        self.support = QLineEdit()
+        self.support.textChanged.connect(self.checkSupport)
+        self.support.setValidator(MyValidator("int",self.support,minus=False))
+
+        #page2["branches"].add_child(((0,1,self.separator),),self.cellWidget(ind,4))
+        
+
+        settingsGrid.addWidget(self.vl_name, 0,1)
+        settingsGrid.addWidget(self.branch, 1,1)
+        settingsGrid.addWidget(self.phase, 2,1)
+        settingsGrid.addWidget(self.support, 3,1)
+
+        btn_box = QDialogButtonBox()
+        btn_box.addButton(QDialogButtonBox.Ok)
+        btn_box.addButton(QDialogButtonBox.Cancel)
+        btn_box.accepted.connect(self.OkBtn)
+        btn_box.rejected.connect(self.CancelBtn)
+
+        
+        vl.addLayout(settingsGrid)
+        vl.addWidget(btn_box)
+        self.setLayout(vl)
+
+        #self.setFixedSize(self.size())
+        
+        self.layout().setSizeConstraint(QLayout.SetFixedSize)
+
+    def OkBtn(self):
+        vl_name = self.vl_name.currentText()
+        page = self.TableFinding(vl_name)
+        n,k = None, None
+        if page is not None:
+            for i in range(page["branches"].rowCount()):
+                n = page["branches"].item(i,0).text()
+                k = page["branches"].item(i,1).text()
+
+                if self.separator.join([n,k]) == self.branch.currentText():
+                    break
+            
+            
+            #print(vl_name,(n,k),self.state_color)
+            if vl_name!='' and None not in (n,k) and self.state_color:
+                self.rez = (vl_name,(n,k),int(self.support.text()),self.dct[self.phase.currentText()])
+                page["branches"].remove_child(((0,1,self.separator),),self.branch)
+                self.le_manager.remove_child(self.vl_name)
+                self.accept()
+            else:
+                self.CancelBtn()
+        else:
+            self.CancelBtn()
+            
+        
+
+
+    def CancelBtn(self):
+        page = self.TableFinding(self.vl_name.currentText())
+        if page is not None:
+            page["branches"].remove_child(((0,1,self.separator),),self.branch)
+        self.le_manager.remove_child(self.vl_name)
+        self.reject()
+
+    def setVlBranchCombo(self,t):
+        page1 = self.TableFinding(self.prevVlName)
+        page2 = self.TableFinding(self.vl_name.currentText())
+        
+        if page1 is None and page2 is not None:
+            page2["branches"].add_child(((0,1,self.separator),),self.branch)
+
+
+        elif page1 is not None and page2 is not None:
+            page1["branches"].remove_child(((0,1,self.separator),),self.branch)
+            page2["branches"].add_child(((0,1,self.separator),),self.branch)
+
+
+        elif page1 is not None and page2 is None:
+            page1["branches"].remove_child(((0,1,self.separator),),self.branch)
+
+        self.prevVlName  = t
+
+    def TableFinding(self,text):
+        for page in self.vl_liks.values():
+            if page['line'].text().strip() == text:
+                break
+        else:
+            return None
+        return page
+
+
+    def checkSupport(self):
+        
+        page = self.TableFinding(self.vl_name.currentText())
+        if page is not None:
+            for i in range(page["sector"].rowCount()):
+                if page["sector"].cellWidget(i,0).currentText() == self.branch.currentText() and page["sector"].cellWidget(i,1).currentText() != "Нет":
+                    s = int(self.support.text()) if self.support.text()!='' else None
+                    n = int(page["sector"].item(i,4).text()) if page["sector"].item(i,4).text()!='' else None
+                    k = int(page["sector"].item(i,5).text()) if page["sector"].item(i,5).text()!='' else None
+                    
+                    if None not in (s,n,k):
+                        if (n<=s<=k or n>=s>=k):
+                            self.support.setStyleSheet("QLineEdit {background-color: white;}")
+                            self.state_color = True
+                            break
+            else:
+                self.support.setStyleSheet("QLineEdit {background-color: #FC9E9E;}")
+                self.state_color = False
+                
+            
+
+        
+
+if __name__=='__main__':
+    import sys
+    from PyQt5.QtWidgets import QApplication
+
+    """ app=QApplication(sys.argv)
+    window = SingleSupportDialog()    
+    window.show()    
+    sys.exit(app.exec_()) """
 
        
         

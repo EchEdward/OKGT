@@ -151,6 +151,110 @@ def set_col_widths(table, widths):
         for idx, width in enumerate(widths):
             row.cells[idx].width = width
 
+def find_length(st, ed, val, support):
+    trig = True
+    for i in range(st,ed):
+        if val['links'][i][0][2] == support and trig:
+            return val["L"][i]
+        if val['links'][i][0][3] == support and not trig:
+            return val["L"][i]
+        trig = not trig
+    else:
+        return None
+
+def vl_sector_description(sector,val,vl_info):
+    st, ed = sector[2:4]
+    start = val['links'][st][0]
+    end = val['links'][ed-1][0]
+    
+    Vlname = start[0]
+    ps_name = vl_info[Vlname]["PSs"][0]["PS_name"]
+
+    groundwires = []
+    for i in vl_info[start[0]]["groundwires"]:
+        if i["link_branch"]==start[1] and colis(start[2],end[3],i["supportN"],i["supportK"]):
+            groundwires.append(i)
+    
+    grounded = []
+    for i in vl_info[start[0]]["grounded"]:
+        if i["resistance"]<30.0 and i["link_branch"]==start[1] and colis(start[2],end[3],i["supportN"],i["supportK"]):
+            grounded.append(i)
+    
+    countercables = []
+    for i,(vl_name, branch,_,_) in enumerate(val['links'][st]):
+        if i==0:
+            countercables += [i for i in vl_info[vl_name]["countercables"] if i["link_branch"]==branch and colis(start[2],end[3],i["supportN"],i["supportK"])]
+        else:
+            for item in vl_info[vl_name]["countercables"]:
+                if item["link_branch"]==branch:
+                    N = item["supportN"]
+                    K = item["supportK"]
+                    N_new, K_new = -1,-1
+                    for j in range(st,ed):
+                        for link in val['links'][j]:
+                            if (vl_name,branch,N) == link[:3]:
+                                N_new = val['links'][0][2]
+                            if (vl_name,branch,K) == (link[0],link[1],link[3]):
+                                K_new = val['links'][0][3]
+                    if N_new!=-1 and K_new!=-1:
+                        d = {"supportN":N_new, "supportK": K_new, "link_branch":start[1]}
+                        if colis(start[2],end[3],d["supportN"],d["supportK"]):
+                            countercables.append({kw:(d[kw] if kw in d else v) for kw, v in item.items()})
+    
+    support_set = set()
+    #print((start[2],end[3]))
+    support_set.add(start[2])
+    support_set.add(end[3])
+    for lst in [grounded,groundwires,countercables]:
+        for item in lst:
+            if start[2]<=item["supportN"]<=end[3] or start[2]>=item["supportN"]>=end[3]:
+                support_set.add(item["supportN"])
+            if start[2]<=item["supportK"]<=end[3] or start[2]>=item["supportK"]>=end[3]:
+                support_set.add(item["supportK"])
+
+    support = sorted(list(support_set),reverse=start[2]>end[3])
+    subsectors = [[support[i-1],support[i]] for i in range(1,len(support))]
+
+    #to_ps = set()
+    subsectors_info = []
+    for N, K in subsectors:
+        wires, ground, conter = None, None, None
+        for item in groundwires:
+            if colis(N,K,item["supportN"],item["supportK"]):
+                okgt = item[item["is_okgt"]]
+                W = k_conductors[okgt]["R0"]
+                gw = item.get(("groundwire2" if item["is_okgt"]=="groundwire1" else "groundwire1"),None)
+                wires = (okgt,W,gw)
+
+        for item in grounded:
+            if colis(N,K,item["supportN"],item["supportK"]):
+                ground = item["resistance"]
+
+        for item in countercables:
+            if colis(N,K,item["supportN"],item["supportK"]):
+                connect_to_ps = []
+                side_to_ps = []
+                if item["connect_to_ps"]:
+                    for ps_n, ps_l in val['length_to_ps_lst'][start[0]].items():
+                        if ps_l.get((start[1],N),float('inf')) == 0:
+                            connect_to_ps.append(ps_n)
+                            side_to_ps.append(False)
+                            #print("Start", N)
+                        if ps_l.get((start[1],K),float('inf')) == 0:
+                            connect_to_ps.append(ps_n)
+                            side_to_ps.append(True)
+                            #print("End", K)
+                        
+                conter = (item["D_countercable"],connect_to_ps,side_to_ps)  
+
+            
+        N_l, K_l = find_length(st, ed, val, N), find_length(st, ed, val, K)
+        #print(N,K,wires, ground, conter,N_l, K_l)
+        subsectors_info.append((N,K,wires, ground, conter,N_l, K_l))
+
+    return Vlname, ps_name, start, subsectors_info
+
+
 def description_settings(doc, okgt_info, vl_info, calc_results, font_size=12, font_name="Times"):
     tbl=doc.add_table(rows=0, cols=5, style='Table Grid')
     for (n,k), val in calc_results.items():
@@ -163,89 +267,8 @@ def description_settings(doc, okgt_info, vl_info, calc_results, font_size=12, fo
 
         for sector in val["sectors"]:
             if sector[1] == "VL":
-                st, ed = sector[2:4]
-                start = val['links'][st][0]
-                end = val['links'][ed-1][0]
                 
-                Vlname = start[0]
-                ps_name = vl_info[Vlname]["PSs"][0]["PS_name"]
-
-                groundwires = []
-                for i in vl_info[start[0]]["groundwires"]:
-                    if i["link_branch"]==start[1] and colis(start[2],end[3],i["supportN"],i["supportK"]):
-                        groundwires.append(i)
-                
-                grounded = []
-                for i in vl_info[start[0]]["grounded"]:
-                    if i["resistance"]<30.0 and i["link_branch"]==start[1] and colis(start[2],end[3],i["supportN"],i["supportK"]):
-                        grounded.append(i)
-                
-                countercables = []
-                for i,(vl_name, branch,_,_) in enumerate(val['links'][st]):
-                    if i==0:
-                        countercables += [i for i in vl_info[vl_name]["countercables"] if i["link_branch"]==branch and colis(start[2],end[3],i["supportN"],i["supportK"])]
-                    else:
-                        for item in vl_info[vl_name]["countercables"]:
-                            if item["link_branch"]==branch:
-                                N = item["supportN"]
-                                K = item["supportK"]
-                                N_new, K_new = -1,-1
-                                for j in range(st,ed):
-                                    for link in val['links'][j]:
-                                        if (vl_name,branch,N) == link[:3]:
-                                            N_new = val['links'][0][2]
-                                        if (vl_name,branch,K) == (link[0],link[1],link[3]):
-                                            K_new = val['links'][0][3]
-                                if N_new!=-1 and K_new!=-1:
-                                    d = {"supportN":N_new, "supportK": K_new, "link_branch":start[1]}
-                                    if colis(start[2],end[3],d["supportN"],d["supportK"]):
-                                        countercables.append({kw:(d[kw] if kw in d else v) for kw, v in item.items()})
-                
-                support_set = set()
-                #print((start[2],end[3]))
-                support_set.add(start[2])
-                support_set.add(end[3])
-                for lst in [grounded,groundwires,countercables]:
-                    for item in lst:
-                        if start[2]<=item["supportN"]<=end[3] or start[2]>=item["supportN"]>=end[3]:
-                            support_set.add(item["supportN"])
-                        if start[2]<=item["supportK"]<=end[3] or start[2]>=item["supportK"]>=end[3]:
-                            support_set.add(item["supportK"])
-
-                support = sorted(list(support_set),reverse=start[2]>end[3])
-                subsectors = [[support[i-1],support[i]] for i in range(1,len(support))]
-
-                #to_ps = set()
-                subsectors_info = []
-                for N, K in subsectors:
-                    wires, ground, conter = None, None, None
-                    for item in groundwires:
-                        if colis(N,K,item["supportN"],item["supportK"]):
-                            okgt = item[item["is_okgt"]]
-                            W = k_conductors[okgt]["R0"]
-                            gw = item.get(("groundwire2" if item["is_okgt"]=="groundwire1" else "groundwire1"),None)
-                            wires = (okgt,W,gw)
-
-                    for item in grounded:
-                        if colis(N,K,item["supportN"],item["supportK"]):
-                            ground = item["resistance"]
-
-                    for item in countercables:
-                        if colis(N,K,item["supportN"],item["supportK"]):
-                            connect_to_ps = []
-                            if item["connect_to_ps"]:
-                                for ps_n, ps_l in val['length_to_ps_lst'][start[0]].items():
-                                    if ps_l.get((start[1],N),float('inf')) == 0:
-                                        connect_to_ps.append(ps_n)
-                                        print("Start", N)
-                                    if ps_l.get((start[1],K),float('inf')) == 0:
-                                        connect_to_ps.append(ps_n)
-                                        print("End", K)
-                                    
-                            conter = (item["D_countercable"],connect_to_ps)  
-
-                    #print(N,K,wires, ground, conter)  
-                    subsectors_info.append((N,K,wires, ground, conter))
+                Vlname, ps_name, start, subsectors_info = vl_sector_description(sector,val,vl_info)
 
                 if subsectors_info:
                     row_cells = tbl.add_row().cells

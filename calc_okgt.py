@@ -642,7 +642,7 @@ def simple_callback(status,data):
 
 
 
-def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30, callback=simple_callback):   
+def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30, callback=simple_callback, single=None):   
     callback("Calc equation system",None)
     i, j = 0, 0
 
@@ -1377,11 +1377,18 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30, callback=simple_call
     B = np.zeros((s_j_vl,),dtype=np.float64)
     B_f = [np.zeros((s_j_vl,),dtype=np.float64),np.zeros((s_j_vl,),dtype=np.float64),np.zeros((s_j_vl,),dtype=np.float64)]
 
+    Ic = np.zeros((s_j_vl,),dtype=np.float64)
+    Ic_f = [np.zeros((s_j_vl,),dtype=np.float64),np.zeros((s_j_vl,),dtype=np.float64),np.zeros((s_j_vl,),dtype=np.float64)]
+
 
     for current ,itm in enumerate(okgt_sc_lst):
         
         """ if current != 99:
             continue """
+
+        if single is not None:
+            if itm['vl_name']!=single[0] or itm['branch']!=single[1] or itm['support']!=single[2]:
+                continue
 
         JE, t_lst, phase_lst = J_matrix_builder(itm,J_make_lst,length_to_ps_lst,rpa_info,Isc_funcs,s_i_end,s_j_end)
         p1 = itm['i_okgt']
@@ -1389,6 +1396,10 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30, callback=simple_call
         callback("Calc points",(current,len(okgt_sc_lst),itm['vl_name'],itm['branch'],itm['support']))
         
         for i, (t, ph) in enumerate(zip(t_lst, phase_lst)):
+            if single is not None:
+                if i!=single[3]:
+                    continue
+            
             p2 = itm['i_vl'][ph]
             #print(ph)
 
@@ -1401,6 +1412,7 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30, callback=simple_call
             okgt_I = np.abs(H[s_i_end:s_i_end+s_j_vl])
             #B_now = okgt_I**2*t
             B_f[ph] += okgt_I**2*t
+            Ic_f[ph] = np.maximum(okgt_I,Ic_f[ph])
             #print(np.shape(B_now))
             #print(s_i_end+s_j_vl-s_i_end)
 
@@ -1415,9 +1427,13 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30, callback=simple_call
             YZ[p2,p1] += 1/R_bypass
 
         B = np.maximum(B, np.maximum(B_f[0], np.maximum(B_f[1], B_f[2])))
+        Ic = np.maximum(Ic, np.maximum(Ic_f[0], np.maximum(Ic_f[1], Ic_f[2])))
         B_f[0].fill(0)
         B_f[1].fill(0)
         B_f[2].fill(0)
+        Ic_f[0].fill(0)
+        Ic_f[1].fill(0)
+        Ic_f[2].fill(0)
 
     """ for i in range(np.shape(B)[0]):
         print(round(B[i]/10**6,3))
@@ -1431,6 +1447,7 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30, callback=simple_call
         result[(n,k)] = {
             "B":[],
             "Bmax":[],
+            "I":[],
             "L":[],
             "type":[],
             "conductor":[],
@@ -1458,6 +1475,7 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30, callback=simple_call
             #result[(n,k)]["B"]+= [B[j],B[j]]   #[B[j]/10**6,B[j]/10**6] 
             result[(n,k)]["B"]+= [B[j]/10**6,B[j]/10**6] 
             result[(n,k)]["Bmax"]+=[Bmax,Bmax]
+            result[(n,k)]["I"]+=[Ic[j],Ic[j]]
 
             bad = True if B[j]/10**6>(Bmax if Bmax is not None else -float('inf')) else bad
 

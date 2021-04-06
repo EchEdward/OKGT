@@ -16,7 +16,7 @@ import os
 
 from table_classes import traceback_erors, OkgtSectorTable, OkgtSingleTable, PSTable, NodeTable, LineEditManager,\
     VlParamsTable, VlSectorTable, VlPsParamsTable, VlCommonChainsTable, RPASettingsTable, ShortCircuitLineTable,\
-    UserComboBox, CustomDialog
+    UserComboBox, CustomDialog, SingleSupportDialog
 
 
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -24,15 +24,15 @@ from matplotlib.figure import Figure
 from matplotlib.ticker import FuncFormatter
 import matplotlib.pyplot as plt
 
-from openpyxl import load_workbook
-
+from openpyxl import load_workbook, Workbook
 import json
+import re
 
 from calc_okgt import k_supports, k_conductors, main_calc, I_sc_corector
 
 from initial_data2 import okgt_info, vl_info, ps_info, rpa_info
 
-from report_creator import memorandum, explanatory
+from report_creator import memorandum, explanatory, vl_sector_description
 
 import traceback
 
@@ -48,18 +48,20 @@ class OkgtCalcTread(QThread):
         self.vl_info = None
         self.ps_info = None
         self.rpa_info = None
+        self.single = None
 
 
-    def setData(self, okgt_info, vl_info, ps_info, rpa_info):
+    def setData(self, okgt_info, vl_info, ps_info, rpa_info, single = None):
         self.okgt_info = okgt_info
         self.vl_info = vl_info
         self.ps_info = ps_info
         self.rpa_info = rpa_info
+        self.single = single
         
     def run(self):
         self.mysignal.emit('start:')
         try:
-            self.result = main_calc(self.okgt_info, self.vl_info, self.ps_info, self.rpa_info, callback=self.runningMesages)
+            self.result = main_calc(self.okgt_info, self.vl_info, self.ps_info, self.rpa_info, callback=self.runningMesages, single=self.single)
         except Exception as ex:
             self.mysignal.emit(f'error:{ex}')
         else:
@@ -68,6 +70,9 @@ class OkgtCalcTread(QThread):
 
     def getData(self):
         return self.result
+
+    def getID(self):
+        return self.okgt_info,self.vl_info,self.ps_info,self.rpa_info,self.single
 
     def runningMesages(self,tp,adds):
         if tp == "Calc equation system":
@@ -193,7 +198,7 @@ class MyWindow(QMainWindow):
 
         self.path_midle_files = os.path.join(self.path_midle_files,'okgt')
 
-        last_path_keys = ['id_save_as','id_open','memorandum_path','explanatory_path','excel_open']
+        last_path_keys = ['id_save_as','id_open','memorandum_path','explanatory_path','excel_open', 'excel_save']
         report_settings = {
             "show_arc_pause":True,
             "show_Irpa":True,
@@ -201,6 +206,7 @@ class MyWindow(QMainWindow):
             "department_boss_type":False,
             "department_boss_name":'',
             "group_boss_name":'',
+            "add_plot_info":False,
         }
         try: 
             with open(os.path.join(self.path_midle_files,'main_settings.json'), "r" ) as f:
@@ -304,6 +310,9 @@ class MyWindow(QMainWindow):
         if "project_name" in source:
             self.ReportSetingsForm["project_name"].setText(source["project_name"])
 
+        if "add_plot_info" in source:
+            self.add_plot_info.setChecked(source["add_plot_info"])
+
     @traceback_erors
     def getReportSettings(self):
         return {
@@ -313,7 +322,8 @@ class MyWindow(QMainWindow):
             "project_name": self.ReportSetingsForm["project_name"].toPlainText(),
             "department_boss_name": self.ReportSetingsForm["department_boss_name"].text(),
             "group_boss_name": self.ReportSetingsForm["group_boss_name"].text(),
-            "department_boss_type": bool(self.ReportSetingsForm["department_boss_type"].checkedId())
+            "department_boss_type": bool(self.ReportSetingsForm["department_boss_type"].checkedId()),
+            "add_plot_info":self.add_plot_info.isChecked(),
         }
         
     
@@ -333,18 +343,25 @@ class MyWindow(QMainWindow):
     
     def CreateMemorandumDoc(self):
         try:
+            trig = sum([sum([j[4] for j in i['sectors']]) for i in self.calc_results.values()]) if self.calc_results is not None else None
+            if trig is None:
+                raise Exception("расчёт не был выполнен")
+            elif trig > 0:
+                Message = QMessageBox(QMessageBox.Question,  'Сохранить служебную записку',
+                    "Вы действительно хотите создать служебную записку где для ОКГТ не опеспечивается термическая стойкость?", parent=self)
+                Message.addButton('Да', QMessageBox.YesRole)
+                Message.addButton('Нет', QMessageBox.NoRole)
+                reply = Message.exec()
+                if reply != 0: return
+
             fname = QFileDialog.getSaveFileName(self, 'Сохранить служебную записку',\
                  os.path.join(self.main_settings['memorandum_path'],self.currentFileName+' Служебная записка'),'*.docx')
             if fname[0] == "" and fname[1] == "": return
             fname = fname[0]
             self.main_settings['memorandum_path'] = os.path.dirname(fname)
-            #self.calc_results = None
-            #self.sectorsFig = {}
-
+                    
             report_setings = self.getReportSettings()
             okgt_info_new, _, vl_info_new,  rpa_info_new = self.ReadTables()
-
-            
 
             memorandum(fname, self.path_midle_files, okgt_info_new, vl_info_new, rpa_info_new, self.calc_results, report_setings)
             
@@ -352,7 +369,7 @@ class MyWindow(QMainWindow):
             ems = QErrorMessage(self)
             ems.setWindowTitle('Возникла ошибка')
             ems.showMessage('Не получилось сохранить файл. '+
-                            'Проверьте введённые данные а также сохраняете ли вы уже в открытый файл.'+str(ex))
+                            'Проверьте введённые данные а также сохраняете ли вы уже в открытый файл.' +str(ex))
         else:
             QMessageBox.information(self, 'Сохранение служебной записки','Операция прошла успешно.',
                                           buttons=QMessageBox.Ok,
@@ -361,14 +378,23 @@ class MyWindow(QMainWindow):
 
     def CreateExplanatoryDoc(self):
         try:
+            trig = sum([sum([j[4] for j in i['sectors']]) for i in self.calc_results.values()]) if self.calc_results is not None else None
+            if trig is None:
+                raise Exception("расчёт не был выполнен")
+            elif trig > 0:
+                Message = QMessageBox(QMessageBox.Question,  'Сохранить пояснительную записку',
+                    "Вы действительно хотите создать пояснительную записку где для ОКГТ не опеспечивается термическая стойкость?", parent=self)
+                Message.addButton('Да', QMessageBox.YesRole)
+                Message.addButton('Нет', QMessageBox.NoRole)
+                reply = Message.exec()
+                if reply != 0: return
+
             fname = QFileDialog.getSaveFileName(self, 'Сохранить пояснительную записку',\
                  os.path.join(self.main_settings['explanatory_path'],self.currentFileName+' Пояснительная записка'),'*.docx')
             if fname[0] == "" and fname[1] == "": return
             fname = fname[0]
             self.main_settings['explanatory_path'] = os.path.dirname(fname)
-            #self.calc_results = None
-            #self.sectorsFig = {}
-
+            
             report_setings = self.getReportSettings()
             okgt_info_new, _, vl_info_new,  rpa_info_new = self.ReadTables()
 
@@ -484,23 +510,35 @@ class MyWindow(QMainWindow):
         run_calc.triggered.connect(self.RunCalculation)
         calcMenu.addAction(run_calc)
 
+        run_single_calc = QAction( '&Расчёт одной опоры', self) #QIcon('exit.png'),
+        run_single_calc.setShortcut("Ctrl+Shift+R")
+        run_single_calc.setStatusTip('Запустить расчёт ОКГТ для одной опоры')
+        run_single_calc.triggered.connect(lambda:self.RunCalculation(single=True))
+        calcMenu.addAction(run_single_calc)
+
         save_memorandum = QAction( '&Создать служебную записку', self) #QIcon('exit.png'),
-        #save_memorandum.setShortcut("Ctrl+R")
+        save_memorandum.setShortcut("Ctrl+U")
         save_memorandum.setStatusTip('Создать служебную записку')
         save_memorandum.triggered.connect(self.CreateMemorandumDoc)
         calcMenu.addAction(save_memorandum)
 
         save_explanatory = QAction( '&Создать пояснительную записку', self) #QIcon('exit.png'),
-        #save_memorandum.setShortcut("Ctrl+R")
+        save_explanatory.setShortcut("Ctrl+I")
         save_explanatory.setStatusTip('Создать пояснительнуюю записку')
         save_explanatory.triggered.connect(self.CreateExplanatoryDoc)
         calcMenu.addAction(save_explanatory)
 
         get_excel_data = QAction( '&Загрузить токи КЗ из Excel', self) #QIcon('exit.png'),
-        #save_memorandum.setShortcut("Ctrl+R")
+        get_excel_data.setShortcut("Ctrl+F")
         get_excel_data.setStatusTip('Загрузить токи КЗ из Excel')
         get_excel_data.triggered.connect(self.getExcelIscData)
         calcMenu.addAction(get_excel_data)
+
+        save_excel_data = QAction( '&Результаты в Excel', self) #QIcon('exit.png'),
+        save_excel_data.setShortcut("Ctrl+L")
+        save_excel_data.setStatusTip('Сохранить результаты расчётов в Excel')
+        save_excel_data.triggered.connect(self.saveDataInExcel)
+        calcMenu.addAction(save_excel_data)
 
 
         settingsMenu = menubar.addMenu('&Настройки')
@@ -510,6 +548,13 @@ class MyWindow(QMainWindow):
         save_recepients_settings.setStatusTip('Сохранить параметры отчёта по умолчанию')
         save_recepients_settings.triggered.connect(self.SaveReportSettings)
         settingsMenu.addAction(save_recepients_settings)
+
+        self.add_plot_info = QAction('Доп. инфо.', self) 
+        self.add_plot_info.setCheckable(True)
+        #self.add_plot_info.setChecked(True)
+        #dragable.triggered.connect(self.DragObj)
+        settingsMenu.addAction(self.add_plot_info)
+        
 
 
 
@@ -584,6 +629,7 @@ class MyWindow(QMainWindow):
                 wd = self.Rpa_Tabs.widget(ind)
                 data = self.rpa_liks[wd]
                 data['rpa_settings'].remove_row()
+                
         
 
     def RemoveSector(self):
@@ -601,7 +647,8 @@ class MyWindow(QMainWindow):
             if ind>-1:
                 wd = self.Rpa_Tabs.widget(ind)
                 data = self.rpa_liks[wd]
-                data['sc_table'].removed_row()
+                data['sc_table'].remove_row()
+                
         
 
     def RemoveParams(self):
@@ -677,6 +724,79 @@ class MyWindow(QMainWindow):
         elif ind == 3:
             self.remove_rpa_tab()
             print("Remove RPA")
+
+    def saveDataInExcel(self):
+        try:
+            fname = QFileDialog.getSaveFileName(self, 'Сохранить результаты в Excel', os.path.join(self.main_settings['excel_save'],self.currentFileName),'*.xlsx')
+            if fname[0] == "" and fname[1] == "": return
+            fname = fname[0]
+            self.main_settings['excel_save'] = os.path.dirname(fname)
+
+            title = ["L, км","W, кА\u00B2·c","Wmax, кА\u00B2·c","Imax, кА","Трос","Опора №"]
+
+            if self.calc_results is not None:
+                wb = Workbook()
+                ws = []
+                i = -1
+                for val in self.calc_results.values():
+                    for sector in val["sectors"]:
+                        
+                        if sector[1] != 'single_dielectric':
+                            i+=1
+                            ws.append(wb.active if i==0 else wb.create_sheet())
+                            try:
+                                ws[i].title = re.sub(r'[\*:\[\]"<>\?\\/]', "_", sector[0][:31])
+                            except Exception as ex:
+                                ws[i].title = str(i+1)
+
+                            st, ed = sector[2:4]
+
+                            if sector[1] == "VL":
+                                vl_name = val['links'][st][0][0]
+                                ps_lst = [i for i in val['length_to_ps_lst'][vl_name].keys()]
+                                ws[i].append(title+[f"от {i}, км" for i in ps_lst])
+                            else:
+                                vl_name = ""
+                                ps_lst = []
+                                ws[i].append(title)
+
+                            trig = True
+                            for j, k in enumerate(range(st,ed)):
+                                ws[i].cell(row=j+2,column=1).value = val["L"][k]
+                                ws[i].cell(row=j+2,column=2).value = val["B"][k]
+                                ws[i].cell(row=j+2,column=3).value = val["Bmax"][k]
+                                ws[i].cell(row=j+2,column=4).value = val["I"][k]/1000
+                                ws[i].cell(row=j+2,column=5).value = val["conductor"][k]
+                                ws[i].cell(row=j+2,column=6).value = val['links'][k][0][2 if trig else 3] if sector[1] == "VL" else "-"
+                                
+
+                                for m, name in enumerate(ps_lst):
+                                    ws[i].cell(row=j+2,column=7+m).value =\
+                                        val['length_to_ps_lst'][vl_name][name][(val['links'][k][0][1],val['links'][k][0][2 if trig else 3])]
+
+                                trig = not trig 
+
+                wb.save(fname)
+
+            else:
+                raise Exception("Выполните расчёт")
+
+
+        except Exception as ex:
+            if str(ex) != "string index out of range":
+                ems = QErrorMessage(self)
+                ems.setWindowTitle('Возникла ошибка')
+                ems.showMessage('Не получилось сохранить результы в Excel. '+
+                                'Проверьте произведён ли перед этим расчёт схемы.'+str(traceback.format_exc()))
+        else:
+            QMessageBox.information(self, 'Сохранение в Excel','Операция прошла успешно.',
+                                    buttons=QMessageBox.Ok,
+                                    defaultButton=QMessageBox.Ok)
+
+
+        
+
+            
 
     
     def getExcelIscData(self):
@@ -914,7 +1034,7 @@ class MyWindow(QMainWindow):
         fg = plt.figure(dpi=75) # Создаём фигуру графика 
         fg_widget = FigureCanvas(fg) # Помещаем фигуру в контейнер
         ax = fg.add_subplot(111) #
-        ax.set_xlabel('L, км',fontsize=self.font_s) 
+        ax.set_xlabel('Растояние, км',fontsize=self.font_s) 
         ax.set_ylabel('Iкз, кА',fontsize=self.font_s)
         ax.set_title("Кривая тока КЗ",fontsize=self.font_s)
         ax.tick_params(labelsize=self.font_s)
@@ -994,7 +1114,7 @@ class MyWindow(QMainWindow):
         ax = self.rpa_liks[widget]['axis']
         title = self.rpa_liks[widget]['ps_combo'].currentText()+' - '+self.rpa_liks[widget]['vl_combo'].currentText()
         ax.clear()
-        ax.set_xlabel('L, км',fontsize=self.font_s) 
+        ax.set_xlabel('Растояние, км',fontsize=self.font_s) 
         ax.set_ylabel('Iкз, кА',fontsize=self.font_s)
         ax.set_title(title,fontsize=self.font_s, loc='left') #"Кривая тока КЗ"
         ax.tick_params(labelsize=self.font_s)
@@ -1016,10 +1136,17 @@ class MyWindow(QMainWindow):
         self.Rpa_Tabs.setTabText(ind,vl_combo.currentText()+"-"+ps_combo.currentText())
 
     
-    def RunCalculation(self):
-        
+    def RunCalculation(self, single=False):
+        single_rez = None
+        if single:
+            dialog = SingleSupportDialog(self.le_manager, self.vl_liks, parent=self)
+            if dialog.exec() == 1:
+                single_rez = dialog.rez
+            else:
+                return
+
         okgt_info_new, ps_info_new, vl_info_new,  rpa_info_new = self.ReadTables()
-        self.okgt_calc_tread.setData(okgt_info_new, vl_info_new, ps_info_new, rpa_info_new)
+        self.okgt_calc_tread.setData(okgt_info_new, vl_info_new, ps_info_new, rpa_info_new, single=single_rez)
 
         if not self.okgt_calc_tread.isRunning():
             self.OkgtCalculationSignals("init:")
@@ -1068,6 +1195,7 @@ class MyWindow(QMainWindow):
             self.Rez_Tabs.removeTab(ind)
         self.sectorsFig = {}
         self.calc_results = self.okgt_calc_tread.getData()
+        okgt_info, vl_info = self.okgt_calc_tread.getID()[:2]
         for val in self.calc_results.values():
             for sector in val["sectors"]:
                 if sector[1] != 'single_dielectric':
@@ -1080,12 +1208,51 @@ class MyWindow(QMainWindow):
                     ax.plot(val["L"][st:ed],val["Bmax"][st:ed],'b',label="Допустимый тепловой импульс")
                     ax.set_xlabel('Растояние, км',fontsize=self.font_s) 
                     ax.set_ylabel('Тепловой импульс, кА\u00B2·c',fontsize=self.font_s)
-                    ax.set_title(f"{sector[0]}",fontsize=self.font_s)
+                    ax.set_title(f"{sector[0]}\n",fontsize=self.font_s)
                     ax.tick_params(labelsize=self.font_s)
-                    ax.legend(frameon=False,fontsize=self.font_s) # Выводим легенду графика
+                    
                     ax.set_xlim([val["L"][st],val["L"][ed-1]])
                     ax.grid(True)
 
+                    if sector[1] == "VL" and self.add_plot_info.isChecked():
+                        subsectors_info = vl_sector_description(sector,val,vl_info)[3]
+
+                        support_d = {}
+                        for item in subsectors_info:
+                            if item[0] not in support_d:
+                                support_d[item[0]] = item[5]
+                            if item[1] not in support_d:
+                                support_d[item[1]] = item[6]
+
+                        btm, top = ax.get_ylim()
+                        ax.set_ylim([btm, top])
+                        for sp, lng in support_d.items():
+                            ax.text (lng, top, str(sp), horizontalalignment='center', verticalalignment='bottom',fontsize=self.font_s)
+                            ax.plot([lng,lng],[btm,top],'k:', linewidth=1)
+
+                        trigs = [True,True,True,True]
+                        for subsector in subsectors_info:
+                            if subsector[2][2] is not None and subsector[4] is not None:
+                                ax.plot([subsector[5],subsector[6]],[top*0.99,top*0.99],'c-.',\
+                                    label="2-й грозотрос и противовес" if trigs[0] else None, linewidth=2)
+                                trigs[0] = False
+                            elif subsector[2][2] is not None and subsector[4] is None:
+                                ax.plot([subsector[5],subsector[6]],[top*0.99,top*0.99],'m:',\
+                                    label="2-й грозотрос" if trigs[1] else None, linewidth=2)
+                                trigs[1] = False
+                            elif subsector[2][2] is None and subsector[4] is not None:
+                                ax.plot([subsector[5],subsector[6]],[top*0.99,top*0.99],'y--',\
+                                    label="Противовес" if trigs[2] else None, linewidth=2)
+                                trigs[2] = False
+
+                            if subsector[4] is not None:
+                                for to_ps in subsector[4][2]:
+                                    ax.plot([subsector[6] if to_ps else subsector[5]],[top*0.99],\
+                                        f'g{">" if to_ps else "<"}',label="Соед. с ПС" if trigs[3] else None, markersize=8)
+                                    trigs[3] = False
+                        
+
+                    ax.legend(frameon=False,fontsize=self.font_s) # Выводим легенду графика
                     self.Rez_Tabs.addTab(fg_widget, f"{sector[0]}")
 
                     if sector[4]:
@@ -1284,6 +1451,8 @@ class MyWindow(QMainWindow):
                 self.setReportSettings(data["report_settings"])
             else:
                 self.setReportSettings(self.main_settings)
+
+            self.calc_results = None
             
 
         except Exception as ex:
@@ -1373,11 +1542,26 @@ class MyWindow(QMainWindow):
             event.ignore()
 
 
+
+
+
 if __name__=='__main__':
-    
+    import logging
+
     app=QApplication(sys.argv)
     window = MyWindow()
-    window.show()
+    
+    logging.basicConfig(filename=os.path.join(window.path_midle_files,'okgt.log'), level=logging.INFO)
+    def my_excepthook(type, value, tback):
+        logging.error(tback.tb_frame.f_code)
+        sys.__excepthook__(type, value, tback)
+        sys.exit(1)
+
+    sys.excepthook = my_excepthook
+    
+    window.show()    
     sys.exit(app.exec_())
+        
+    
 
     
