@@ -3,7 +3,7 @@
 from PyQt5.QtWidgets import QTableWidgetItem, QTableWidget, QItemDelegate, QComboBox, QLineEdit,\
     QCheckBox, QWidget, QHBoxLayout, QButtonGroup, QSizePolicy, QDialog, QVBoxLayout,QDialogButtonBox,\
     QLabel, QGridLayout, QLayout
-from PyQt5.QtGui import  QValidator,  QColor
+from PyQt5.QtGui import  QValidator,  QColor, QBrush
 from PyQt5.QtCore import Qt
 
 from calc_okgt import k_supports, k_conductors
@@ -707,7 +707,8 @@ class TableTempalte(QTableWidget):
             self.childrenList[key].discard(child)
             child.clear()
             child.addItems(["Нет"])
-        
+
+
 
     
 
@@ -716,11 +717,13 @@ class UserComboBox(QComboBox):
         super(UserComboBox, self).__init__(parent)
         self.Trig = trig
 
+    
     def wheelEvent(self, *args, **kwargs):
         if self.Trig["trig"]:
             self.Trig["timer"].stop()
             self.Trig["timer"].start(500)
-            return QComboBox.wheelEvent(self, *args, **kwargs)  
+            return QComboBox.wheelEvent(self, *args, **kwargs)
+   
 
 
 class NodeTable(TableTempalte):
@@ -884,7 +887,7 @@ class VlSectorTable(TableTempalte):
         super().__init__(parent)
 
         self.setColumnCount(6)
-        self.setHorizontalHeaderLabels(["Ветвь","Участок ОКГТ","Lн, км","Lкм, км","Оп. нач.","Оп. конц."])    
+        self.setHorizontalHeaderLabels(["Ветвь","Участок ОКГТ","Lн, км","Lк, км","Оп. нач.","Оп. конц."])    
 
         self.NodeObj = NodeObj
         self.SectorObj = SectorObj
@@ -980,7 +983,7 @@ class VlPsParamsTable(TableTempalte):
         super().__init__(parent)     
 
         self.setColumnCount(4)
-        self.setHorizontalHeaderLabels(["Ветвь","ПС","Сторона","Lкм, км"])   
+        self.setHorizontalHeaderLabels(["Ветвь","ПС","Сторона","L, км"])   
 
         self.NodeObj = NodeObj
         self.PSObj = PSObj
@@ -1425,6 +1428,16 @@ class VlParamsTable(TableTempalte):
             conductor = UserComboBox(self.timer)
             conductor.addItems(["Нет"]+[key for key in k_conductors.keys()])
             self.setCellWidget(ind,3, conductor)
+
+
+            #conductor.setItemData(0, QBrush(Qt.red), Qt.ForegroundRole)
+            #clr = conductor.currentData(Qt.ForegroundRole).color().name()
+            #conductor.setStyleSheet("QComboBox:editable{{ color: {} }}".format(clr))
+            #conductor.setStyleSheet("QComboBox:editable{{ color: inherit }}")
+            #conductor.setItemData(0, Qt.red, Qt.TextColorRole)
+            #conductor.setItemData(0, QBrush(Qt.red), Qt.BackgroundRole)
+
+
         elif self._tp_params == "phases":
             phase = UserComboBox(self.timer)
             phase.addItems(self.ph)

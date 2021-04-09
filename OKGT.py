@@ -32,7 +32,9 @@ from calc_okgt import k_supports, k_conductors, main_calc, I_sc_corector
 
 from initial_data2 import okgt_info, vl_info, ps_info, rpa_info
 
-from report_creator import memorandum, explanatory, vl_sector_description
+from report_creator import memorandum, explanatory, vl_sector_description, conduct_sector_discription
+
+from check_init_data import checker_init_data
 
 import traceback
 
@@ -529,7 +531,7 @@ class MyWindow(QMainWindow):
         calcMenu.addAction(save_explanatory)
 
         get_excel_data = QAction( '&Загрузить токи КЗ из Excel', self) #QIcon('exit.png'),
-        get_excel_data.setShortcut("Ctrl+F")
+        get_excel_data.setShortcut("Ctrl+K")
         get_excel_data.setStatusTip('Загрузить токи КЗ из Excel')
         get_excel_data.triggered.connect(self.getExcelIscData)
         calcMenu.addAction(get_excel_data)
@@ -1145,6 +1147,17 @@ class MyWindow(QMainWindow):
             else:
                 return
 
+        try:
+            checker_init_data(self.Okgt_node_table,self.Okgt_sector_table,self.Okgt_single_table,self.Ps_table,self.vl_liks,self.rpa_liks,self.mainTabWidget)
+        except Exception as ex:
+            print(traceback.format_exc())
+            ems = QErrorMessage(self)
+            ems.setWindowTitle('Возникла ошибка')
+            ems.showMessage(str(ex))
+
+            return
+
+
         okgt_info_new, ps_info_new, vl_info_new,  rpa_info_new = self.ReadTables()
         self.okgt_calc_tread.setData(okgt_info_new, vl_info_new, ps_info_new, rpa_info_new, single=single_rez)
 
@@ -1196,7 +1209,7 @@ class MyWindow(QMainWindow):
         self.sectorsFig = {}
         self.calc_results = self.okgt_calc_tread.getData()
         okgt_info, vl_info = self.okgt_calc_tread.getID()[:2]
-        for val in self.calc_results.values():
+        for okgt_branch,val in self.calc_results.items():
             for sector in val["sectors"]:
                 if sector[1] != 'single_dielectric':
                     st, ed = sector[2:4]
@@ -1212,6 +1225,8 @@ class MyWindow(QMainWindow):
                     ax.tick_params(labelsize=self.font_s)
                     
                     ax.set_xlim([val["L"][st],val["L"][ed-1]])
+                    btm, top = ax.get_ylim()
+                    ax.set_ylim([btm, top])
                     ax.grid(True)
 
                     if sector[1] == "VL" and self.add_plot_info.isChecked():
@@ -1224,8 +1239,7 @@ class MyWindow(QMainWindow):
                             if item[1] not in support_d:
                                 support_d[item[1]] = item[6]
 
-                        btm, top = ax.get_ylim()
-                        ax.set_ylim([btm, top])
+                        
                         for sp, lng in support_d.items():
                             ax.text (lng, top, str(sp), horizontalalignment='center', verticalalignment='bottom',fontsize=self.font_s)
                             ax.plot([lng,lng],[btm,top],'k:', linewidth=1)
@@ -1250,7 +1264,14 @@ class MyWindow(QMainWindow):
                                     ax.plot([subsector[6] if to_ps else subsector[5]],[top*0.99],\
                                         f'g{">" if to_ps else "<"}',label="Соед. с ПС" if trigs[3] else None, markersize=8)
                                     trigs[3] = False
-                        
+
+                    elif sector[1] == "single_conductive" and self.add_plot_info.isChecked():
+                        trigs = [True]
+                        lng_st,lng_ed,_,_,_,_,countercable,_,_ = conduct_sector_discription(sector,val,okgt_branch,okgt_info)
+                        if countercable:
+                            ax.plot([lng_st,lng_ed],[top*0.99,top*0.99],'y--',\
+                                label="Противовес" if trigs[0] else None, linewidth=2)
+                            trigs[0] = False
 
                     ax.legend(frameon=False,fontsize=self.font_s) # Выводим легенду графика
                     self.Rez_Tabs.addTab(fg_widget, f"{sector[0]}")

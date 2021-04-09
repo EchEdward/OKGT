@@ -254,6 +254,25 @@ def vl_sector_description(sector,val,vl_info):
 
     return Vlname, ps_name, start, subsectors_info
 
+def conduct_sector_discription(sector,val,branch,okgt_info):
+    st, ed = sector[2:4]
+    for okgt_sector in okgt_info[branch]:
+        if okgt_sector["name"] == sector[0]:
+            break
+
+    R = k_conductors[okgt_sector["groundwire"]]["R0"]
+    W = k_conductors[okgt_sector["groundwire"]]["Bsc"]
+
+    return val["L"][st],\
+        val["L"][ed-1],\
+        R,\
+        W,\
+        okgt_sector["point_grounded"],\
+        okgt_sector.get("point_resistance"),\
+        okgt_sector["countercable"],\
+        okgt_sector.get("D_countercable"),\
+        okgt_sector["groundwire"]
+
 
 def description_settings(doc, okgt_info, vl_info, calc_results, font_size=12, font_name="Times"):
     tbl=doc.add_table(rows=0, cols=5, style='Table Grid')
@@ -375,25 +394,21 @@ def description_settings(doc, okgt_info, vl_info, calc_results, font_size=12, fo
                 cell_settings(row_cells1[4], '-', align="center", font_size=font_size, font_name=font_name)
 
             elif sector[1] == "single_conductive":
-                st, ed = sector[2:4]
-                for okgt_sector in okgt_info[(n,k)]:
-                    if okgt_sector["name"] == sector[0]:
-                        break
+                
 
-                length = round(abs(val["L"][ed-1]-val["L"][st]),3)
-                R = k_conductors[okgt_sector["groundwire"]]["R0"]
-                W = k_conductors[okgt_sector["groundwire"]]["Bsc"]
+                lng_st,lng_ed,R,W,point_grounded,point_resistance,countercable,D_countercable,groundwire = conduct_sector_discription(sector,val,(n,k),okgt_info)
 
+                length = round(abs(lng_ed-lng_st),3)
                 s = []
                 count = 0
-                if okgt_sector["point_grounded"]>0:
-                    if okgt_sector["point_resistance"]<30.0:
+                if point_grounded>0:
+                    if point_resistance<30.0:
                         count += 1
-                        s.append(f'{count}. Обеспечить на данном участке сопротивление ЗУ опор не более {round(okgt_sector["point_resistance"],2)} Ом')
+                        s.append(f'{count}. Обеспечить на данном участке сопротивление ЗУ опор не более {round(point_resistance,2)} Ом')
 
-                if okgt_sector["countercable"]:
+                if countercable:
                     count += 1
-                    s.append(f'{count}. ЗУ опор соединить между собой горизонтальным заземлителем из стали круглой диаметром {round(okgt_sector["D_countercable"],1)} мм')
+                    s.append(f'{count}. ЗУ опор соединить между собой горизонтальным заземлителем из стали круглой диаметром {round(D_countercable,1)} мм')
 
                 if W is not None:
 
@@ -425,7 +440,7 @@ def description_settings(doc, okgt_info, vl_info, calc_results, font_size=12, fo
                     cell_settings(row_cells2[1], f'{length} км', align="left", font_size=font_size, font_name=font_name)
 
                     cell_settings(row_cells1[2], str(R), align="center", font_size=font_size, font_name=font_name)
-                    cell_settings(row_cells1[3], okgt_sector["groundwire"], align="center", font_size=font_size, font_name=font_name)
+                    cell_settings(row_cells1[3], groundwire, align="center", font_size=font_size, font_name=font_name)
 
 
                     advices = ';\n'.join(s)
