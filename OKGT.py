@@ -1148,7 +1148,16 @@ class MyWindow(QMainWindow):
                 return
 
         try:
-            checker_init_data(self.Okgt_node_table,self.Okgt_sector_table,self.Okgt_single_table,self.Ps_table,self.vl_liks,self.rpa_liks,self.mainTabWidget)
+            checker_init_data(
+                self.Okgt_node_table,\
+                self.Okgt_sector_table,\
+                self.Okgt_single_table,\
+                self.Ps_table,\
+                self.vl_liks,\
+                self.rpa_liks,\
+                self.Vl_Tabs,\
+                self.Rpa_Tabs,\
+                self.mainTabWidget)
         except Exception as ex:
             print(traceback.format_exc())
             ems = QErrorMessage(self)

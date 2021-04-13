@@ -177,6 +177,13 @@ class DownloadDelegate(QItemDelegate):
             else: 
                 return QItemDelegate.createEditor(self, parent, option, index)
 
+        elif self.tp == "vl_ps": 
+            if index.column() == 3:
+                lineedit.setValidator(MyValidator("duble",lineedit,minus=False))
+                return lineedit
+            else: 
+                return QItemDelegate.createEditor(self, parent, option, index)
+
         elif self.tp=="vl_grounded": 
             if index.column() in (1,2):
                 lineedit.setValidator(MyValidator("int",lineedit,minus=False))
