@@ -137,7 +137,7 @@ def checker_init_data(Okgt_node_table,Okgt_sector_table,Okgt_single_table,Ps_tab
             raise Exception(f'В строке {i+1} таблицы участков ОКГТ "Длина" не может иметь нулевое значение')
 
         if tp=='ВЛ':
-            vl_okgt[sector_name] = [False, float(sector_len)]
+            vl_okgt[sector_name] = [False, float(sector_len),i]
         elif tp == 'Проводящий':
             single_okgt[sector_name] = [False,i]
 
@@ -284,6 +284,7 @@ def checker_init_data(Okgt_node_table,Okgt_sector_table,Okgt_single_table,Ps_tab
 
     
     vl_names = {}
+    vl_ps_rpa = {}
     for lv_w, vl_item in vl_liks.items():
         vl_name = vl_item["line"].text()
 
@@ -348,7 +349,7 @@ def checker_init_data(Okgt_node_table,Okgt_sector_table,Okgt_single_table,Ps_tab
         used_vl_branches = {separator.join(i): [False,j] for j,i in enumerate(lst)}
         ps_branches = {separator.join(i): {'left':False,'right':True} if nodes.get(i[1],[0,False])[1] else {'left':False,'right':False} for i in lst}
         ps_branches[separator.join(lst[0])]['left'] = True
-        print(ps_branches)
+        
 
         ln_vl_sect_tb = vl_item["sector"].rowCount()
 
@@ -442,6 +443,9 @@ def checker_init_data(Okgt_node_table,Okgt_sector_table,Okgt_single_table,Ps_tab
 
             if vl_row_type != "Нет":
                 sector_branch[vl_row_type] = vl_row_branch
+                vl_okgt[vl_row_type][0] = True
+
+            
                 
         
         branch_sector_order = {}
@@ -571,11 +575,14 @@ def checker_init_data(Okgt_node_table,Okgt_sector_table,Okgt_single_table,Ps_tab
                 raise Exception(f'На ветвь ВЛ в строке {i+1} не ссылается ни одна запись')
 
         branch_sector_set = {}
+        branch_support_set = {}
         for br_n, diap in branch_sector_order.items():
             i,j = diap[0][0], diap[-1][1]
             direct = i<j
             rn = zip(range(i,j),range(i+1,j+1)) if direct else zip(range(i,j,-1),range(i-1,j-1,-1))
+            rn2 =  range(i,j+1) if direct else range(j,i+1) 
             branch_sector_set[br_n] = (set([(i,j) for i,j in rn]),direct)
+            branch_support_set[br_n] = (set([i for i in rn2]), direct)
 
         okgt_sector_set = {}
         for tp, diap in okgt_sector_order.items():
@@ -668,7 +675,7 @@ def checker_init_data(Okgt_node_table,Okgt_sector_table,Okgt_single_table,Ps_tab
                         branch_sector_set_for[vl_row_branch] = set()
 
                     
-                    if branch_sector_set_for[vl_row_branch] >= curent_set:
+                    if len(branch_sector_set_for[vl_row_branch] & curent_set)>0:
                         mainTabWidget.setCurrentIndex(2)
                         Vl_Tabs.setCurrentIndex(Vl_Tabs.indexOf(lv_w))
                         vl_item["params_tab"].setCurrentIndex(tb_page)
@@ -766,7 +773,7 @@ def checker_init_data(Okgt_node_table,Okgt_sector_table,Okgt_single_table,Ps_tab
                     if vl_row_branch not in okgt_sector_set_for:
                         okgt_sector_set_for[vl_row_branch] = set()
 
-                    if okgt_sector_set_for[vl_row_branch] >= curent_set:
+                    if len(okgt_sector_set_for[vl_row_branch] & curent_set)>0:
                         mainTabWidget.setCurrentIndex(2)
                         Vl_Tabs.setCurrentIndex(Vl_Tabs.indexOf(lv_w))
                         vl_item["params_tab"].setCurrentIndex(3)
@@ -792,7 +799,7 @@ def checker_init_data(Okgt_node_table,Okgt_sector_table,Okgt_single_table,Ps_tab
                     if vl_row_branch not in okgt_sector_set_for:
                         okgt_sector_set_for[vl_row_branch] = set()
 
-                    if okgt_sector_set_for[vl_row_branch] >= curent_set:
+                    if len(okgt_sector_set_for[vl_row_branch] & curent_set)>0:
                         mainTabWidget.setCurrentIndex(2)
                         Vl_Tabs.setCurrentIndex(Vl_Tabs.indexOf(lv_w))
                         vl_item["params_tab"].setCurrentIndex(3)
@@ -813,7 +820,7 @@ def checker_init_data(Okgt_node_table,Okgt_sector_table,Okgt_single_table,Ps_tab
                     branch_sector_set_for[vl_row_branch] = set()
 
                 
-                if branch_sector_set_for[vl_row_branch] >= curent_set:
+                if len(branch_sector_set_for[vl_row_branch] & curent_set)>0:
                     mainTabWidget.setCurrentIndex(2)
                     Vl_Tabs.setCurrentIndex(Vl_Tabs.indexOf(lv_w))
                     vl_item["params_tab"].setCurrentIndex(3)
@@ -851,8 +858,6 @@ def checker_init_data(Okgt_node_table,Okgt_sector_table,Okgt_single_table,Ps_tab
             vl_row_side = vl_item["params"]["PSs"].cellWidget(i,2).currentText()
             vl_row_leng = vl_item["params"]["PSs"].item(i,3).text()
             
-            #ps_branches
-            #ps_names
 
             if vl_row_branch == "Нет":
                 mainTabWidget.setCurrentIndex(2)
@@ -901,12 +906,386 @@ def checker_init_data(Okgt_node_table,Okgt_sector_table,Okgt_single_table,Ps_tab
             else:
                 ps_branches[vl_row_branch][side_d[vl_row_side]] = False
 
+            vl_ps_rpa[(vl_name,vl_row_ps)] = False
+
         for i, j in ps_branches.items():
             if j["left"] or j["right"]:
                 mainTabWidget.setCurrentIndex(2)
                 Vl_Tabs.setCurrentIndex(Vl_Tabs.indexOf(lv_w))
                 vl_item["params_tab"].setCurrentIndex(4)
                 raise Exception(f'В таблице ПС ВЛ не задано присоединение к подстанции для ветви {i}')
+
+
+        
+
+        ln_vl_gr_tb = vl_item["params"]["grounded"].rowCount()
+        branch_support_set_for = {}
+        for i in range(ln_vl_gr_tb):
+            vl_row_branch = vl_item["params"]["grounded"].cellWidget(i,0).currentText()
+            support_N = vl_item["params"]["grounded"].item(i,1).text()
+            support_K = vl_item["params"]["grounded"].item(i,2).text()
+            vl_row_side = vl_item["params"]["grounded"].cellWidget(i,3).currentText()
+            vl_row_rzy = vl_item["params"]["grounded"].item(i,4).text()
+
+            if vl_row_branch == "Нет":
+                mainTabWidget.setCurrentIndex(2)
+                Vl_Tabs.setCurrentIndex(Vl_Tabs.indexOf(lv_w))
+                vl_item["params_tab"].setCurrentIndex(5)
+                vl_item["params"]["grounded"].setRangeSelected(QTableWidgetSelectionRange(i, 1, i, 2), True)
+                raise Exception(f'В строке {i+1} таблицы заземления грозотросов ВЛ не выбрана ветвь')
+
+            if support_N=='':
+                mainTabWidget.setCurrentIndex(2)
+                Vl_Tabs.setCurrentIndex(Vl_Tabs.indexOf(lv_w))
+                vl_item["params_tab"].setCurrentIndex(5)
+                vl_item["params"][tb_type].setRangeSelected(QTableWidgetSelectionRange(i, 1, i, 1), True)
+                raise Exception(f'В строке {i+1} таблицы заземления грозотросов ВЛ не задано "Оп. нач."')
+
+            if support_K=='':
+                mainTabWidget.setCurrentIndex(2)
+                Vl_Tabs.setCurrentIndex(Vl_Tabs.indexOf(lv_w))
+                vl_item["params_tab"].setCurrentIndex(5)
+                vl_item["params"]["grounded"].setRangeSelected(QTableWidgetSelectionRange(i, 2, i, 2), True)
+                raise Exception(f'В строке {i+1} таблицы заземления грозотросов ВЛ не задано "Оп. конц."')
+
+            if int(support_N)!=int(support_K):
+                if (int(support_N)<int(support_K)) != branch_support_set[vl_row_branch][1]:
+                    mainTabWidget.setCurrentIndex(2)
+                    Vl_Tabs.setCurrentIndex(Vl_Tabs.indexOf(lv_w))
+                    vl_item["params_tab"].setCurrentIndex(5)
+                    vl_item["params"]["grounded"].setRangeSelected(QTableWidgetSelectionRange(i, 1, i, 2), True)
+                    raise Exception(f'В строке {i+1} таблицы заземления грозотросов ВЛ "Оп. нач." и "Оп. конц." имеют противоположное направление с таблицой участков ВЛ')
+            
+            
+            if vl_row_rzy == "":
+                mainTabWidget.setCurrentIndex(2)
+                Vl_Tabs.setCurrentIndex(Vl_Tabs.indexOf(lv_w))
+                vl_item["params_tab"].setCurrentIndex(5)
+                vl_item["params"]["grounded"].setRangeSelected(QTableWidgetSelectionRange(i, 4, i, 4), True)
+                raise Exception(f'В строке {i+1} таблицы заземления грозотросов ВЛ не задано "Rзу"')
+
+            elif float(vl_row_rzy) == 0:
+                mainTabWidget.setCurrentIndex(2)
+                Vl_Tabs.setCurrentIndex(Vl_Tabs.indexOf(lv_w))
+                vl_item["params_tab"].setCurrentIndex(5)
+                vl_item["params"]["grounded"].setRangeSelected(QTableWidgetSelectionRange(i, 4, i, 4), True)
+                raise Exception(f'В строке {i+1} таблицы заземления грозотросов ВЛ "Rзу" не может быть нулевым')
+
+
+            s_n,s_k = int(support_N), int(support_K)
+            rn =  range(s_n,s_k+1) if s_n<s_k else range(s_k,s_n+1)
+            curent_set = set([i for i in rn])
+
+
+            if not (curent_set <=  branch_support_set[vl_row_branch][0]):
+                mainTabWidget.setCurrentIndex(2)
+                Vl_Tabs.setCurrentIndex(Vl_Tabs.indexOf(lv_w))
+                vl_item["params_tab"].setCurrentIndex(5)
+                vl_item["params"]["grounded"].setRangeSelected(QTableWidgetSelectionRange(i, 1, i, 2), True)
+                raise Exception(f'В строке {i+1} таблицы заземления грозотросов ВЛ "Оп. нач." и "Оп. конц." не принадлежит ветви ВЛ')
+            else:
+                if vl_row_branch not in branch_support_set_for:
+                    branch_support_set_for[vl_row_branch] = set()
+
+                                
+                if len(branch_support_set_for[vl_row_branch] & curent_set)>0:
+                    mainTabWidget.setCurrentIndex(2)
+                    Vl_Tabs.setCurrentIndex(Vl_Tabs.indexOf(lv_w))
+                    vl_item["params_tab"].setCurrentIndex(5)
+                    vl_item["params"]["grounded"].setRangeSelected(QTableWidgetSelectionRange(i, 1, i, 2), True)
+                    raise Exception(f'В строке {i+1} таблицы заземления грозотросов ВЛ участок с такими же граничными опорами уже задан')
+
+                else:
+                    branch_support_set_for[vl_row_branch].update(curent_set)
+
+
+        ln_vl_cntr_tb = vl_item["params"]["countercables"].rowCount()
+        branch_sector_set_for = {}
+        for i in range(ln_vl_cntr_tb):
+            vl_row_branch = vl_item["params"]["countercables"].cellWidget(i,0).currentText()
+            support_N = vl_item["params"]["countercables"].item(i,1).text()
+            support_K = vl_item["params"]["countercables"].item(i,2).text()
+            X_c = vl_item["params"]["countercables"].item(i,3).text()
+            Y_c = vl_item["params"]["countercables"].item(i,4).text()
+            D_c = vl_item["params"]["countercables"].item(i,5).text()
+            Po_c = vl_item["params"]["countercables"].item(i,6).text()
+
+            if vl_row_branch == "Нет":
+                mainTabWidget.setCurrentIndex(2)
+                Vl_Tabs.setCurrentIndex(Vl_Tabs.indexOf(lv_w))
+                vl_item["params_tab"].setCurrentIndex(6)
+                vl_item["params"]["countercables"].setRangeSelected(QTableWidgetSelectionRange(i, 1, i, 2), True)
+                raise Exception(f'В строке {i+1} таблицы противовесов ВЛ не выбрана ветвь')
+
+            if support_N=='':
+                mainTabWidget.setCurrentIndex(2)
+                Vl_Tabs.setCurrentIndex(Vl_Tabs.indexOf(lv_w))
+                vl_item["params_tab"].setCurrentIndex(6)
+                vl_item["params"]["countercables"].setRangeSelected(QTableWidgetSelectionRange(i, 1, i, 1), True)
+                raise Exception(f'В строке {i+1} таблицы противовесов ВЛ не задано "Оп. нач."')
+
+            if support_K=='':
+                mainTabWidget.setCurrentIndex(2)
+                Vl_Tabs.setCurrentIndex(Vl_Tabs.indexOf(lv_w))
+                vl_item["params_tab"].setCurrentIndex(6)
+                vl_item["params"]["countercables"].setRangeSelected(QTableWidgetSelectionRange(i, 2, i, 2), True)
+                raise Exception(f'В строке {i+1} таблицы противовесов ВЛ не задано "Оп. конц."')
+
+            if int(support_N)==int(support_K):
+                mainTabWidget.setCurrentIndex(2)
+                Vl_Tabs.setCurrentIndex(Vl_Tabs.indexOf(lv_w))
+                vl_item["params_tab"].setCurrentIndex(6)
+                vl_item["params"]["countercables"].setRangeSelected(QTableWidgetSelectionRange(i, 1, i, 2), True)
+                raise Exception(f'В строке {i+1} таблицы противовесов ВЛ "Оп. нач." и "Оп. конц." не могут быть одинаковыми')
+
+            if (int(support_N)<int(support_K)) != branch_sector_set[vl_row_branch][1]:
+                mainTabWidget.setCurrentIndex(2)
+                Vl_Tabs.setCurrentIndex(Vl_Tabs.indexOf(lv_w))
+                vl_item["params_tab"].setCurrentIndex(6)
+                vl_item["params"]["countercables"].setRangeSelected(QTableWidgetSelectionRange(i, 1, i, 2), True)
+                raise Exception(f'В строке {i+1} таблицы противовесов ВЛ "Оп. нач." и "Оп. конц." имеют противоположное направление с таблицой участков ВЛ')
+
+            if D_c == "":
+                mainTabWidget.setCurrentIndex(2)
+                Vl_Tabs.setCurrentIndex(Vl_Tabs.indexOf(lv_w))
+                vl_item["params_tab"].setCurrentIndex(6)
+                vl_item["params"]["countercables"].setRangeSelected(QTableWidgetSelectionRange(i, 5, i, 5), True)
+                raise Exception(f'В строке {i+1} таблицы противовесов ВЛ не задано "D"')
+
+            elif float(D_c) == 0:
+                mainTabWidget.setCurrentIndex(2)
+                Vl_Tabs.setCurrentIndex(Vl_Tabs.indexOf(lv_w))
+                vl_item["params_tab"].setCurrentIndex(6)
+                vl_item["params"]["countercables"].setRangeSelected(QTableWidgetSelectionRange(i, 5, i, 5), True)
+                raise Exception(f'В строке {i+1} таблицы противовесов ВЛ "D" не может быть нулевым')
+
+            if Po_c == "":
+                mainTabWidget.setCurrentIndex(2)
+                Vl_Tabs.setCurrentIndex(Vl_Tabs.indexOf(lv_w))
+                vl_item["params_tab"].setCurrentIndex(6)
+                vl_item["params"]["countercables"].setRangeSelected(QTableWidgetSelectionRange(i, 6, i, 6), True)
+                raise Exception(f'В строке {i+1} таблицы противовесов ВЛ не задано "Po"')
+
+            elif float(Po_c) == 0:
+                mainTabWidget.setCurrentIndex(2)
+                Vl_Tabs.setCurrentIndex(Vl_Tabs.indexOf(lv_w))
+                vl_item["params_tab"].setCurrentIndex(6)
+                vl_item["params"]["countercables"].setRangeSelected(QTableWidgetSelectionRange(i, 6, i, 6), True)
+                raise Exception(f'В строке {i+1} таблицы противовесов ВЛ "Po" не может быть нулевым')
+
+            if X_c == "":
+                mainTabWidget.setCurrentIndex(2)
+                Vl_Tabs.setCurrentIndex(Vl_Tabs.indexOf(lv_w))
+                vl_item["params_tab"].setCurrentIndex(6)
+                vl_item["params"]["countercables"].setRangeSelected(QTableWidgetSelectionRange(i, 3, i, 3), True)
+                raise Exception(f'В строке {i+1} таблицы противовесов ВЛ не задано "X"')
+
+            if Y_c == "":
+                mainTabWidget.setCurrentIndex(2)
+                Vl_Tabs.setCurrentIndex(Vl_Tabs.indexOf(lv_w))
+                vl_item["params_tab"].setCurrentIndex(6)
+                vl_item["params"]["countercables"].setRangeSelected(QTableWidgetSelectionRange(i, 4, i, 4), True)
+                raise Exception(f'В строке {i+1} таблицы противовесов ВЛ не задано "Y"')
+
+
+            s_n,s_k = int(support_N), int(support_K)
+            rn = zip(range(s_n,s_k),range(s_n+1,s_k+1)) if s_n<s_k else zip(range(s_n,s_k,-1),range(s_n-1,s_k-1,-1))
+            curent_set = set([(i,j) for i,j in rn])
+
+            if not (curent_set <=  branch_sector_set[vl_row_branch][0]):
+                mainTabWidget.setCurrentIndex(2)
+                Vl_Tabs.setCurrentIndex(Vl_Tabs.indexOf(lv_w))
+                vl_item["params_tab"].setCurrentIndex(6)
+                vl_item["params"]["countercables"].setRangeSelected(QTableWidgetSelectionRange(i, 1, i, 2), True)
+                raise Exception(f'В строке {i+1} таблицы противовесов ВЛ "Оп. нач." и "Оп. конц." не принадлежит ветви ВЛ')
+            else:
+                if vl_row_branch not in branch_sector_set_for:
+                    branch_sector_set_for[vl_row_branch] = set()
+
+                
+                if len(branch_sector_set_for[vl_row_branch] & curent_set)>0:
+                    mainTabWidget.setCurrentIndex(2)
+                    Vl_Tabs.setCurrentIndex(Vl_Tabs.indexOf(lv_w))
+                    vl_item["params_tab"].setCurrentIndex(6)
+                    vl_item["params"]["countercables"].setRangeSelected(QTableWidgetSelectionRange(i, 1, i, 2), True)
+                    raise Exception(f'В строке {i+1} таблицы противовесов ВЛ участок с такими же граничными опорами уже задан')
+
+                else:
+                    branch_sector_set_for[vl_row_branch].update(curent_set)
+
+
+        ln_vl_chain_tb = vl_item["params"]["commonchains"].rowCount()
+        branch_sector_set_for = {}
+        for i in range(ln_vl_chain_tb):
+            vl_row_branch = vl_item["params"]["commonchains"].cellWidget(i,0).currentText()
+            support_N = vl_item["params"]["commonchains"].item(i,1).text()
+            support_K = vl_item["params"]["commonchains"].item(i,2).text()
+            vl_row_name_ch = vl_item["params"]["commonchains"].cellWidget(i,3).currentText()
+            vl_row_branch_ch = vl_item["params"]["commonchains"].cellWidget(i,4).currentText()
+            support_N_ch = vl_item["params"]["commonchains"].item(i,5).text()
+            support_K_ch = vl_item["params"]["commonchains"].item(i,6).text()
+
+            if vl_row_branch == "Нет":
+                mainTabWidget.setCurrentIndex(2)
+                Vl_Tabs.setCurrentIndex(Vl_Tabs.indexOf(lv_w))
+                vl_item["params_tab"].setCurrentIndex(7)
+                vl_item["params"]["commonchains"].setRangeSelected(QTableWidgetSelectionRange(i, 1, i, 2), True)
+                raise Exception(f'В строке {i+1} таблицы смежных цепей ВЛ не выбрана ветвь текущей ВЛ')
+
+            if vl_row_name_ch == "Нет":
+                mainTabWidget.setCurrentIndex(2)
+                Vl_Tabs.setCurrentIndex(Vl_Tabs.indexOf(lv_w))
+                vl_item["params_tab"].setCurrentIndex(7)
+                vl_item["params"]["commonchains"].setRangeSelected(QTableWidgetSelectionRange(i, 5, i, 6), True)
+                raise Exception(f'В строке {i+1} таблицы смежных цепей ВЛ не выбрано название второй ВЛ')
+
+            if vl_row_branch_ch == "Нет":
+                mainTabWidget.setCurrentIndex(2)
+                Vl_Tabs.setCurrentIndex(Vl_Tabs.indexOf(lv_w))
+                vl_item["params_tab"].setCurrentIndex(7)
+                vl_item["params"]["commonchains"].setRangeSelected(QTableWidgetSelectionRange(i, 5, i, 6), True)
+                raise Exception(f'В строке {i+1} таблицы смежных цепей ВЛ не выбрана ветвь второй ВЛ')
+
+            if support_N=='':
+                mainTabWidget.setCurrentIndex(2)
+                Vl_Tabs.setCurrentIndex(Vl_Tabs.indexOf(lv_w))
+                vl_item["params_tab"].setCurrentIndex(7)
+                vl_item["params"]["commonchains"].setRangeSelected(QTableWidgetSelectionRange(i, 1, i, 1), True)
+                raise Exception(f'В строке {i+1} таблицы смежных цепей ВЛ не задано "Оп. нач." текущей ВЛ')
+
+            if support_K=='':
+                mainTabWidget.setCurrentIndex(2)
+                Vl_Tabs.setCurrentIndex(Vl_Tabs.indexOf(lv_w))
+                vl_item["params_tab"].setCurrentIndex(7)
+                vl_item["params"]["commonchains"].setRangeSelected(QTableWidgetSelectionRange(i, 2, i, 2), True)
+                raise Exception(f'В строке {i+1} таблицы смежных цепей ВЛ не задано "Оп. конц." текущей ВЛ')
+
+            if int(support_N)==int(support_K):
+                mainTabWidget.setCurrentIndex(2)
+                Vl_Tabs.setCurrentIndex(Vl_Tabs.indexOf(lv_w))
+                vl_item["params_tab"].setCurrentIndex(7)
+                vl_item["params"]["commonchains"].setRangeSelected(QTableWidgetSelectionRange(i, 1, i, 2), True)
+                raise Exception(f'В строке {i+1} таблицы смежных цепей ВЛ "Оп. нач." и "Оп. конц." для текущей ВЛ не могут быть одинаковыми')
+
+            if (int(support_N)<int(support_K)) != branch_sector_set[vl_row_branch][1]:
+                mainTabWidget.setCurrentIndex(2)
+                Vl_Tabs.setCurrentIndex(Vl_Tabs.indexOf(lv_w))
+                vl_item["params_tab"].setCurrentIndex(7)
+                vl_item["params"]["commonchains"].setRangeSelected(QTableWidgetSelectionRange(i, 1, i, 2), True)
+                raise Exception(f'В строке {i+1} таблицы смежных цепей ВЛ "Оп. нач." и "Оп. конц." для текущей ВЛ имеют противоположное направление с таблицой участков ВЛ')
+
+            if support_N_ch=='':
+                mainTabWidget.setCurrentIndex(2)
+                Vl_Tabs.setCurrentIndex(Vl_Tabs.indexOf(lv_w))
+                vl_item["params_tab"].setCurrentIndex(7)
+                vl_item["params"]["commonchains"].setRangeSelected(QTableWidgetSelectionRange(i, 5, i, 5), True)
+                raise Exception(f'В строке {i+1} таблицы смежных цепей ВЛ не задано "Оп. нач." второй ВЛ')
+
+            if support_K_ch=='':
+                mainTabWidget.setCurrentIndex(2)
+                Vl_Tabs.setCurrentIndex(Vl_Tabs.indexOf(lv_w))
+                vl_item["params_tab"].setCurrentIndex(7)
+                vl_item["params"]["commonchains"].setRangeSelected(QTableWidgetSelectionRange(i, 6, i, 6), True)
+                raise Exception(f'В строке {i+1} таблицы смежных цепей ВЛ не задано "Оп. конц." второй ВЛ')
+
+            if abs(int(support_N)-int(support_K)) != abs(int(support_N_ch)-int(support_K_ch)):
+                mainTabWidget.setCurrentIndex(2)
+                Vl_Tabs.setCurrentIndex(Vl_Tabs.indexOf(lv_w))
+                vl_item["params_tab"].setCurrentIndex(7)
+                vl_item["params"]["commonchains"].setRangeSelected(QTableWidgetSelectionRange(i, 1, i, 2), True)
+                raise Exception(f'В строке {i+1} таблицы смежных цепей ВЛ "Оп. нач." и "Оп. конц." для заданных ВЛ имеют не одинаковое количество участков')
+
+            s_n,s_k = int(support_N), int(support_K)
+            rn = zip(range(s_n,s_k),range(s_n+1,s_k+1)) if s_n<s_k else zip(range(s_n,s_k,-1),range(s_n-1,s_k-1,-1))
+            curent_set = set([(i,j) for i,j in rn])
+
+            if not (curent_set <=  branch_sector_set[vl_row_branch][0]):
+                mainTabWidget.setCurrentIndex(2)
+                Vl_Tabs.setCurrentIndex(Vl_Tabs.indexOf(lv_w))
+                vl_item["params_tab"].setCurrentIndex(7)
+                vl_item["params"]["commonchains"].setRangeSelected(QTableWidgetSelectionRange(i, 1, i, 2), True)
+                raise Exception(f'В строке {i+1} таблицы противовесов ВЛ "Оп. нач." и "Оп. конц." для текущей ВЛ не принадлежит ветви ВЛ')
+            else:
+                if vl_row_branch not in branch_sector_set_for:
+                    branch_sector_set_for[vl_row_branch] = set()
+
+                
+                if len(branch_sector_set_for[vl_row_branch] & curent_set)>0:
+                    mainTabWidget.setCurrentIndex(2)
+                    Vl_Tabs.setCurrentIndex(Vl_Tabs.indexOf(lv_w))
+                    vl_item["params_tab"].setCurrentIndex(7)
+                    vl_item["params"]["commonchains"].setRangeSelected(QTableWidgetSelectionRange(i, 1, i, 2), True)
+                    raise Exception(f'В строке {i+1} таблицы противовесов ВЛ участок с такими же граничными опорами для текущей ВЛ уже задан')
+
+                else:
+                    branch_sector_set_for[vl_row_branch].update(curent_set)
+
+
+    for i, j in vl_okgt.items():
+        if not j[0]:
+            mainTabWidget.setCurrentIndex(0)
+            Okgt_sector_table.setRangeSelected(QTableWidgetSelectionRange(j[2], 2, j[2], 3), True)
+            raise Exception(f'На участок {i} в строке {j[2]+1} таблицы участков ОКГТ не разу не сослались')
+
+    
+    # Проверка таблиц РЗА
+    for lv_w, ps_item in rpa_liks.items():
+        arc_times = ps_item['arc_times'].value()
+
+        vl_combo = ps_item['vl_combo'].currentText()
+        ps_combo = ps_item['ps_combo'].currentText()
+
+        if vl_combo == "Нет":
+            mainTabWidget.setCurrentIndex(3)
+            Rpa_Tabs.setCurrentIndex(Rpa_Tabs.indexOf(lv_w))
+            raise Exception('В параметрах РЗА не выбрана ВЛ')
+
+        if ps_combo == "Нет":
+            mainTabWidget.setCurrentIndex(3)
+            Rpa_Tabs.setCurrentIndex(Rpa_Tabs.indexOf(lv_w))
+            raise Exception('В параметрах РЗА не выбрана ПС')
+
+        if (vl_combo,ps_combo) not in vl_ps_rpa:
+            mainTabWidget.setCurrentIndex(3)
+            Rpa_Tabs.setCurrentIndex(Rpa_Tabs.indexOf(lv_w))
+            raise Exception('В параметрах РЗА заданная ВЛ не присоеденена к выбранной ПС')
+        elif vl_ps_rpa[(vl_combo,ps_combo)]:
+            mainTabWidget.setCurrentIndex(3)
+            Rpa_Tabs.setCurrentIndex(Rpa_Tabs.indexOf(lv_w))
+            raise Exception('В параметрах РЗА параметры для указыных ВЛ и ПС уже заданы')
+        else:
+            vl_ps_rpa[(vl_combo,ps_combo)] = True
+
+        
+        ln_rpa_set_tb = ps_item['rpa_settings'].rowCount()
+
+        if ln_rpa_set_tb < 1:
+            mainTabWidget.setCurrentIndex(3)
+            Rpa_Tabs.setCurrentIndex(Rpa_Tabs.indexOf(lv_w))
+            raise Exception(f'Нет ни одной записи в таблице параметров РЗА')
+
+        for i in range(ln_rpa_set_tb):
+            for j in range(2+arc_times):
+                if i==0 and (j==0 or j==1):
+                    continue
+                cell = ps_item['rpa_settings'].item(i,j).text()
+
+                if cell=="":
+                    mainTabWidget.setCurrentIndex(3)
+                    Rpa_Tabs.setCurrentIndex(Rpa_Tabs.indexOf(lv_w))
+                    ps_item['rpa_settings'].setRangeSelected(QTableWidgetSelectionRange(i, j, i, j), True)
+                    raise Exception(f'В строке {i+1} столбце {j+1} таблицы параметров РЗА ничего не задано')
+
+
+    for i,j in vl_ps_rpa.items():
+        if not j:
+            mainTabWidget.setCurrentIndex(3)
+            raise Exception(f'Для {i[0]} - {i[1]} не заданы параметры РЗА')
+
+
+
+
+        
 
             
             

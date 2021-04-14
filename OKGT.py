@@ -153,7 +153,7 @@ class MyWindow(QMainWindow):
         self.rpa_liks = {}
         self.vl_settings_dict = {
             "conductors":"Провода","phases":"Фазировка","supports":"Опоры","groundwires":"Грозотросы",\
-            "PSs":"ПС","grounded":"Заземление проводов","countercables":"Противовес","commonchains":"Смежные цепи",
+            "PSs":"ПС","grounded":"Заземление грозотросов","countercables":"Противовес","commonchains":"Смежные цепи",
         }
         self.vl_settings_dict_rev = {v:k for k,v in self.vl_settings_dict.items()}
 
