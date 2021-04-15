@@ -518,29 +518,32 @@ class MyWindow(QMainWindow):
         run_single_calc.triggered.connect(lambda:self.RunCalculation(single=True))
         calcMenu.addAction(run_single_calc)
 
-        save_memorandum = QAction( '&Создать служебную записку', self) #QIcon('exit.png'),
-        save_memorandum.setShortcut("Ctrl+U")
-        save_memorandum.setStatusTip('Создать служебную записку')
-        save_memorandum.triggered.connect(self.CreateMemorandumDoc)
-        calcMenu.addAction(save_memorandum)
-
-        save_explanatory = QAction( '&Создать пояснительную записку', self) #QIcon('exit.png'),
-        save_explanatory.setShortcut("Ctrl+I")
-        save_explanatory.setStatusTip('Создать пояснительнуюю записку')
-        save_explanatory.triggered.connect(self.CreateExplanatoryDoc)
-        calcMenu.addAction(save_explanatory)
-
         get_excel_data = QAction( '&Загрузить токи КЗ из Excel', self) #QIcon('exit.png'),
         get_excel_data.setShortcut("Ctrl+K")
         get_excel_data.setStatusTip('Загрузить токи КЗ из Excel')
         get_excel_data.triggered.connect(self.getExcelIscData)
         calcMenu.addAction(get_excel_data)
 
-        save_excel_data = QAction( '&Результаты в Excel', self) #QIcon('exit.png'),
+        
+        reportMenu = menubar.addMenu('&Отчёт')
+
+        save_memorandum = QAction( '&Создать служебную записку', self) #QIcon('exit.png'),
+        save_memorandum.setShortcut("Ctrl+U")
+        save_memorandum.setStatusTip('Создать служебную записку')
+        save_memorandum.triggered.connect(self.CreateMemorandumDoc)
+        reportMenu.addAction(save_memorandum)
+
+        save_explanatory = QAction( '&Создать пояснительную записку', self) #QIcon('exit.png'),
+        save_explanatory.setShortcut("Ctrl+I")
+        save_explanatory.setStatusTip('Создать пояснительнуюю записку')
+        save_explanatory.triggered.connect(self.CreateExplanatoryDoc)
+        reportMenu.addAction(save_explanatory)
+
+        save_excel_data = QAction( '&Сохранить результаты в Excel', self) #QIcon('exit.png'),
         save_excel_data.setShortcut("Ctrl+L")
         save_excel_data.setStatusTip('Сохранить результаты расчётов в Excel')
         save_excel_data.triggered.connect(self.saveDataInExcel)
-        calcMenu.addAction(save_excel_data)
+        reportMenu.addAction(save_excel_data)
 
 
         settingsMenu = menubar.addMenu('&Настройки')

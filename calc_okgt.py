@@ -569,7 +569,16 @@ def J_matrix_builder(point_sc,J_make_lst,length_to_ps_lst,rpa_info,Isc_funcs,s_i
     support = point_sc['support']
     ps_lst = point_sc['ps_lst']
 
-    Isc = {i: Isc_funcs[(vl_name,i)]["aproFunc"](length_to_ps_lst[vl_name][i][branch,support]) for i in ps_lst}
+    #interpFunc
+    #Isc = {i: Isc_funcs[(vl_name,i)]["aproFunc"](length_to_ps_lst[vl_name][i][branch,support]) for i in ps_lst}
+    #Isc = {i: Isc_funcs[(vl_name,i)]["interpFunc"](length_to_ps_lst[vl_name][i][branch,support]) for i in ps_lst}
+
+    Isc = {}
+    for i in ps_lst:
+        try:
+            Isc[i] = Isc_funcs[(vl_name,i)]["interpFunc"](length_to_ps_lst[vl_name][i][branch,support])
+        except Exception:
+            Isc[i] = Isc_funcs[(vl_name,i)]["aproFunc"](length_to_ps_lst[vl_name][i][branch,support])
 
     T_m = {}
 
@@ -1355,6 +1364,12 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30, callback=simple_call
     Yadd = Y_matrix_builder(lst_zy,s_i_end)
     Isc_funcs = Isc_get_maker(rpa_info)
     length_to_ps_lst = length_to_ps_builder(vl_info)
+
+    #print(Isc_funcs)
+    #for lnnt in [0,6,12,18,24,30,36,42,48,54,60,66,72,74.2]:
+        #interpFunc
+        #print(lnnt,Isc_funcs[('VL #1', 'PS_1')]['aproFunc'](lnnt))
+        #print(lnnt,Isc_funcs[('VL #1', 'PS_1')]['interpFunc'](lnnt))
 
 
     # Do matrix operation for create equation system

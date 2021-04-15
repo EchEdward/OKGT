@@ -1264,6 +1264,8 @@ def checker_init_data(Okgt_node_table,Okgt_sector_table,Okgt_single_table,Ps_tab
             Rpa_Tabs.setCurrentIndex(Rpa_Tabs.indexOf(lv_w))
             raise Exception(f'Нет ни одной записи в таблице параметров РЗА')
 
+        #'sc_table':sc_table,
+
         for i in range(ln_rpa_set_tb):
             for j in range(2+arc_times):
                 if i==0 and (j==0 or j==1):
@@ -1275,6 +1277,31 @@ def checker_init_data(Okgt_node_table,Okgt_sector_table,Okgt_single_table,Ps_tab
                     Rpa_Tabs.setCurrentIndex(Rpa_Tabs.indexOf(lv_w))
                     ps_item['rpa_settings'].setRangeSelected(QTableWidgetSelectionRange(i, j, i, j), True)
                     raise Exception(f'В строке {i+1} столбце {j+1} таблицы параметров РЗА ничего не задано')
+
+
+        ln_rpa_sc_tb = ps_item['sc_table'].rowCount()
+
+        if ln_rpa_sc_tb < 1:
+            mainTabWidget.setCurrentIndex(3)
+            Rpa_Tabs.setCurrentIndex(Rpa_Tabs.indexOf(lv_w))
+            raise Exception(f'Нет ни одной записи в таблице кривой тока КЗ')
+
+        for i in range(ln_rpa_sc_tb):
+            I_sc = ps_item['sc_table'].item(i,0).text()
+            L_sc = ps_item['sc_table'].item(i,1).text()
+
+            if I_sc=='':
+                mainTabWidget.setCurrentIndex(3)
+                Rpa_Tabs.setCurrentIndex(Rpa_Tabs.indexOf(lv_w))
+                ps_item['sc_table'].setRangeSelected(QTableWidgetSelectionRange(i, 0, i, 0), True)
+                raise Exception(f'В строке {i+1} таблицы кривой тока КЗ в "Iкз" ничего не задано')
+
+            if L_sc=='':
+                mainTabWidget.setCurrentIndex(3)
+                Rpa_Tabs.setCurrentIndex(Rpa_Tabs.indexOf(lv_w))
+                ps_item['sc_table'].setRangeSelected(QTableWidgetSelectionRange(i, 1, i, 1), True)
+                raise Exception(f'В строке {i+1} таблицы кривой тока КЗ в "L" ничего не задано')
+
 
 
     for i,j in vl_ps_rpa.items():
