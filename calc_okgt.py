@@ -512,10 +512,21 @@ def I_sc_corector(I_sc, L_sc, borders=False):
         for i1, (I, L) in enumerate(zip(I_sc, L_sc)):
             if I is not None or L is not None:
                 break
+
+        else:
+            if borders:
+                return I_sc, L_sc, None
+            else:
+                return I_sc, L_sc
         
         for i2, I, L in zip(range(len(I_sc),0,-1),I_sc[::-1], L_sc[::-1]):
             if I is not None or L is not None:
                 break
+        else:
+            if borders:
+                return I_sc, L_sc, None
+            else:
+                return I_sc, L_sc
         
         I_sc1, L_sc1 = I_sc[i1:i2], L_sc[i1:i2]
 
@@ -536,7 +547,10 @@ def I_sc_corector(I_sc, L_sc, borders=False):
             return I_sc2, L_sc2
     except Exception as ex:
         print(ex)
-        return I_sc, L_sc
+        if borders:
+            return I_sc, L_sc, None
+        else:
+            return I_sc, L_sc
     
 
 def Isc_get_maker(rpa_info):  
@@ -556,9 +570,12 @@ def Isc_get_maker(rpa_info):
         I_sc, L_sc = I_sc_corector(I_sc, L_sc)
         
         interp = interp1d(L_sc, I_sc)
-        popt, _ = curve_fit(Isc_func, L_sc, I_sc, maxfev=10**6) #, maxfev=10**6
-
-        result[key] = {"interpFunc":interp,"aproFunc":lambda x, p=popt: Isc_func(x,*p)}
+        try:
+            popt, _ = curve_fit(Isc_func, L_sc, I_sc, maxfev=10**6) #, maxfev=10**6
+        except Exception:
+            result[key] = {"interpFunc":interp,"aproFunc":interp}
+        else:
+            result[key] = {"interpFunc":interp,"aproFunc":lambda x, p=popt: Isc_func(x,*p)}
 
     return result
 
@@ -576,7 +593,7 @@ def J_matrix_builder(point_sc,J_make_lst,length_to_ps_lst,rpa_info,Isc_funcs,s_i
     Isc = {}
     for i in ps_lst:
         try:
-            Isc[i] = Isc_funcs[(vl_name,i)]["interpFunc"](length_to_ps_lst[vl_name][i][branch,support])
+            Isc[i] = Isc_funcs[(vl_name,i)]["interpFunc"](round(length_to_ps_lst[vl_name][i][branch,support],5))
         except Exception:
             Isc[i] = Isc_funcs[(vl_name,i)]["aproFunc"](length_to_ps_lst[vl_name][i][branch,support])
 
@@ -1492,7 +1509,8 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30, callback=simple_call
             result[(n,k)]["Bmax"]+=[Bmax,Bmax]
             result[(n,k)]["I"]+=[Ic[j],Ic[j]]
 
-            bad = True if B[j]/10**6>(Bmax if Bmax is not None else -float('inf')) else bad
+            bad = True if B[j]/10**6>(Bmax if Bmax is not None else -float('inf')) and okgt_max[j]["type"]!="single_dielectric" else bad
+            
 
             result[(n,k)]["conductor"]+=[okgt_max[j]['conductor'],okgt_max[j]['conductor']]
             result[(n,k)]["type"]+=[okgt_max[j]["type"],okgt_max[j]["type"]]
@@ -1501,6 +1519,8 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30, callback=simple_call
             result[(n,k)]["L"].append(dl)
             dl+=okgt_max[j]['length']
             result[(n,k)]["L"].append(dl)
+            if bad:
+                print(bad, result[(n,k)]["type"][-1],result[(n,k)]["links"][-1],result[(n,k)]["conductor"][-1])
 
             if okgt_max[j]["sector_link"]!=sector:
                 result[(n,k)]["sectors"].append((sector,tp,st,ed,bad))

@@ -65,7 +65,7 @@ class OkgtCalcTread(QThread):
         try:
             self.result = main_calc(self.okgt_info, self.vl_info, self.ps_info, self.rpa_info, callback=self.runningMesages, single=self.single)
         except Exception as ex:
-            self.mysignal.emit(f'error:{ex}')
+            self.mysignal.emit(f'error:{traceback.format_exc()}')
         else:
             self.mysignal.emit('end:')
 

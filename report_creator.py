@@ -222,9 +222,10 @@ def vl_sector_description(sector,val,vl_info):
         for item in groundwires:
             if colis(N,K,item["supportN"],item["supportK"]):
                 okgt = item[item["is_okgt"]]
-                W = k_conductors[okgt]["R0"]
+                R = k_conductors[okgt]["R0"]
+                W = k_conductors[okgt]["Bsc"] if k_conductors[okgt]["Bsc"] is not None else 'Неизвестно'
                 gw = item.get(("groundwire2" if item["is_okgt"]=="groundwire1" else "groundwire1"),None)
-                wires = (okgt,W,gw)
+                wires = (okgt,R,gw,W)
 
         for item in grounded:
             if colis(N,K,item["supportN"],item["supportK"]):
@@ -302,7 +303,7 @@ def description_settings(doc, okgt_info, vl_info, calc_results, font_size=12, fo
 
                     cell_settings(row_cells[0], 'Наименование субучастков ОКГТ', align="center", font_size=font_size, font_name=font_name)
                     cell_settings(row_cells[2], 'Сопротивление постоянному току не более, Ом/км', align="center", font_size=font_size, font_name=font_name) 
-                    cell_settings(row_cells[3], 'Допустимый тепловой импульс, кА\u00B2·c', align="center", font_size=font_size, font_name=font_name) 
+                    cell_settings(row_cells[3], 'Допустимый тепловой импульс не менее, кА\u00B2·c', align="center", font_size=font_size, font_name=font_name) 
                     cell_settings(row_cells[4], 'Дополнительные мероприятия', align="center", font_size=font_size, font_name=font_name)
 
                     for item in subsectors_info:
@@ -331,7 +332,7 @@ def description_settings(doc, okgt_info, vl_info, calc_results, font_size=12, fo
 
                         #print(item[2])
                         cell_settings(row_cells1[2], str(item[2][1]) , align="center", font_size=font_size, font_name=font_name)
-                        cell_settings(row_cells1[3], item[2][0], align="center", font_size=font_size, font_name=font_name)
+                        cell_settings(row_cells1[3], str(item[2][3]), align="center", font_size=font_size, font_name=font_name)
 
                         s = []
                         count = 0
@@ -396,7 +397,7 @@ def description_settings(doc, okgt_info, vl_info, calc_results, font_size=12, fo
             elif sector[1] == "single_conductive":
                 
 
-                lng_st,lng_ed,R,W,point_grounded,point_resistance,countercable,D_countercable,groundwire = conduct_sector_discription(sector,val,(n,k),okgt_info)
+                lng_st,lng_ed,R,W,point_grounded,point_resistance,countercable,D_countercable,_ = conduct_sector_discription(sector,val,(n,k),okgt_info)
 
                 length = round(abs(lng_ed-lng_st),3)
                 s = []
@@ -440,7 +441,7 @@ def description_settings(doc, okgt_info, vl_info, calc_results, font_size=12, fo
                     cell_settings(row_cells2[1], f'{length} км', align="left", font_size=font_size, font_name=font_name)
 
                     cell_settings(row_cells1[2], str(R), align="center", font_size=font_size, font_name=font_name)
-                    cell_settings(row_cells1[3], groundwire, align="center", font_size=font_size, font_name=font_name)
+                    cell_settings(row_cells1[3], str(W) if W is not None else 'Неизвестно', align="center", font_size=font_size, font_name=font_name)
 
 
                     advices = ';\n'.join(s)

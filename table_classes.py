@@ -1950,10 +1950,8 @@ class ShortCircuitLineTable(QTableWidget):
     def closeEditor(self, editor, hint):
         data = self.read_table(own=True)
         self.setColorMistakes(data['I_sc'], data['L_sc'])
-
         if self.PlotDataFunc is not None:
             self.PlotDataFunc(data)
-        
         QTableWidget.closeEditor(self, editor, hint)
         
 
@@ -2008,8 +2006,9 @@ class ShortCircuitLineTable(QTableWidget):
     @traceback_erors
     def setColorMistakes(self, I_sc, L_sc):
         rows = self.rowCount()
+        #print(I_sc, L_sc)
         if rows <= 2:
-            for i in range(2):
+            for i in range(len(I_sc)):
                 if I_sc[i] is None:
                     self.item(i,0).setBackground(QColor(255,0,0,100))
                 else:
@@ -2053,6 +2052,7 @@ class ShortCircuitLineTable(QTableWidget):
                 else:
                     self.item(i,1).setBackground(QColor(255,255,255))
 
+        
 
 
 
