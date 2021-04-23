@@ -592,6 +592,8 @@ def J_matrix_builder(point_sc,J_make_lst,length_to_ps_lst,rpa_info,Isc_funcs,s_i
 
     Isc = {}
     for i in ps_lst:
+        if (vl_name,i) not in rpa_info:
+            continue
         try:
             Isc[i] = Isc_funcs[(vl_name,i)]["interpFunc"](round(length_to_ps_lst[vl_name][i][branch,support],5))
         except Exception:
@@ -600,22 +602,27 @@ def J_matrix_builder(point_sc,J_make_lst,length_to_ps_lst,rpa_info,Isc_funcs,s_i
     T_m = {}
 
     for ps in ps_lst:
+        if (vl_name,ps) not in rpa_info:
+            continue
         inf = rpa_info[(vl_name,ps)]
         const_t = inf["Tswitch"] + inf["Tautomation"]
-        Iy =  min(map(lambda x,y=Isc[ps]: (y-x if y>=x else float("inf"),x) , inf["rpa_I_setting"]))
-        ind = inf["rpa_I_setting"].index(Iy[1]) if Iy[0]!=float("inf") else None
+        if len(inf["rpa_I_setting"])==0 and len(inf["rpa_time_setting"])==0:
+            I_t = [(Isc[ps],float("inf"))] 
+        else:
+            Iy =  min(map(lambda x,y=Isc[ps]: (y-x if y>=x else float("inf"),x) , inf["rpa_I_setting"]))
+            ind = inf["rpa_I_setting"].index(Iy[1]) if Iy[0]!=float("inf") else None
 
-        if ind is None:
-            raise Exception(f"Current of relay settings more than I short {vl_name} {ps}")
+            if ind is None:
+                raise Exception(f"Current of relay settings more than I short {vl_name} {ps}")
 
-        I_t = [(Isc[ps],const_t+inf["rpa_time_setting"][ind])]
+            I_t = [(Isc[ps],const_t+inf["rpa_time_setting"][ind])]
 
         for i in range(inf["arc_times"]):
             I_t.append((0,inf["arc_pause"][i]))
             I_t.append((Isc[ps],const_t+inf["rpa_time_setting"][ind]-inf["arc_setting"][i][ind]))
 
         T_m[ps] = I_t
-
+    
     Time_line = []
     t = 0
     while True:
@@ -642,7 +649,7 @@ def J_matrix_builder(point_sc,J_make_lst,length_to_ps_lst,rpa_info,Isc_funcs,s_i
 
         if sum(I.values())!=0:
             Time_line.append((t-t_old,I))
-
+    
     JE = sparse.lil_matrix((s_i_end+s_j_end, len(Time_line)*3),dtype=np.complex128)
     
     t_lst = []
@@ -1519,8 +1526,7 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30, callback=simple_call
             result[(n,k)]["L"].append(dl)
             dl+=okgt_max[j]['length']
             result[(n,k)]["L"].append(dl)
-            if bad:
-                print(bad, result[(n,k)]["type"][-1],result[(n,k)]["links"][-1],result[(n,k)]["conductor"][-1])
+            
 
             if okgt_max[j]["sector_link"]!=sector:
                 result[(n,k)]["sectors"].append((sector,tp,st,ed,bad))

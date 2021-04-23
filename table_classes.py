@@ -1639,7 +1639,7 @@ class OkgtSingleTable(TableTempalte):
         self.setColumnWidth(11,70)
         self.dataSetObj = dataSetObj
 
-        self.dataSetObj.setLinkParentToChildren([((2,),((1,"Проводящий"),))])
+        self.dataSetObj.setLinkParentToChildren([((2,),((1,"Проводящий"),)),((2,),((1,"ВЛ"),))])
         self.add_cmb = self.dataSetObj.add_child
         self.remove_cmb = self.dataSetObj.remove_child
         self.timer = timer

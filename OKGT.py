@@ -1,6 +1,6 @@
 # pylint: disable=E0611
 # pylint: disable=E1101
-#pyi-makespec --onefile --icon=icon.ico --noconsole VEZRead.py
+#pyi-makespec  --icon=icon.ico --noconsole OKGT.py
 from PyQt5.QtWidgets import QApplication,QMainWindow,QWidget,QVBoxLayout,QHBoxLayout,QLabel,\
     QScrollArea,QSizePolicy,QSplitter, QSizePolicy, qApp, QAction,\
     QMessageBox,QFileDialog, QErrorMessage, QDoubleSpinBox, QSpacerItem, QLineEdit, QItemDelegate, QProgressBar,\
@@ -559,7 +559,18 @@ class MyWindow(QMainWindow):
         #self.add_plot_info.setChecked(True)
         #dragable.triggered.connect(self.DragObj)
         settingsMenu.addAction(self.add_plot_info)
+
+        open_memorandum_file = QAction('Редактировать файл служебной записки', self) #QIcon('exit.png'),
+        #run_calc.setShortcut("Ctrl+R")
+        open_memorandum_file.setStatusTip('Редактировать файл служебной записки')
+        open_memorandum_file.triggered.connect(lambda:os.startfile('docx_templates\\memorandum.docx'))
+        settingsMenu.addAction(open_memorandum_file)
         
+        open_explanatory_file = QAction('Редактировать файл пояснительной записки', self) #QIcon('exit.png'),
+        #run_calc.setShortcut("Ctrl+R")
+        open_explanatory_file.setStatusTip('Редактировать файл пояснительной записки')
+        open_explanatory_file.triggered.connect(lambda:os.startfile('docx_templates\\explanatory_note.docx'))
+        settingsMenu.addAction(open_explanatory_file)
 
 
 
@@ -1293,7 +1304,7 @@ class MyWindow(QMainWindow):
                     
 
                     self.resFig[fg_widget] = (fg,ax)
-                    self.sectorsFig[sector] = (fg,ax)
+                    self.sectorsFig[sector] = (fg,ax,fg_widget)
 
         self.mainTabWidget.setCurrentIndex(4)
 

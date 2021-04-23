@@ -638,8 +638,12 @@ def explanatory(fname, path_midle_files, okgt_info, vl_info, rpa_info, report_se
         vl_name = val['vl_combo'].currentText()
         ps_name = val['ps_combo'].currentText()
         midle_img = os.path.join(path_midle_files,f'figures/ssc_{i}.jpg')
+        s_w, s_h = val['figure'].get_size_inches()
         val['figure'].set_size_inches(17, 5,forward=True) # Изменяем размер сохраняемого графика
         val['figure'].savefig(midle_img, format='jpg', dpi=100) # Cохраняем графики
+        val['figure'].set_size_inches(s_w, s_h,forward=True)
+        val['figure'].canvas.draw()
+        val['figure'].canvas.flush_events()
         im = Image.open(midle_img)
         width, height = im.size
         im.crop((130,0,width-130,height)).save(midle_img)
@@ -679,8 +683,12 @@ def explanatory(fname, path_midle_files, okgt_info, vl_info, rpa_info, report_se
             if sector[1] != "single_dielectric":
                 i+=1
                 midle_img = os.path.join(path_midle_files,f'figures/w_{i}.jpg')
+                s_w, s_h =  sectorsFig[sector][0].get_size_inches()
                 sectorsFig[sector][0].set_size_inches(17, 5,forward=True) 
-                sectorsFig[sector][0].savefig(midle_img, format='jpg', dpi=100) 
+                sectorsFig[sector][0].savefig(midle_img, format='jpg', dpi=100)
+                sectorsFig[sector][0].set_size_inches(s_w, s_h,forward=True) 
+                sectorsFig[sector][0].canvas.draw()
+                sectorsFig[sector][0].canvas.flush_events()
                 im = Image.open(midle_img)
                 width, height = im.size
                 im.crop((130,0,width-130,height)).save(midle_img)

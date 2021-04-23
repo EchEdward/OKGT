@@ -1259,12 +1259,15 @@ def checker_init_data(Okgt_node_table,Okgt_sector_table,Okgt_single_table,Ps_tab
         
         ln_rpa_set_tb = ps_item['rpa_settings'].rowCount()
 
-        if ln_rpa_set_tb < 1:
-            mainTabWidget.setCurrentIndex(3)
-            Rpa_Tabs.setCurrentIndex(Rpa_Tabs.indexOf(lv_w))
-            raise Exception(f'Нет ни одной записи в таблице параметров РЗА')
+        if ln_rpa_set_tb < 2:
+            if arc_times>0:
+                mainTabWidget.setCurrentIndex(3)
+                Rpa_Tabs.setCurrentIndex(Rpa_Tabs.indexOf(lv_w))
+                raise Exception(f'В таблице параметров РЗА при отсуствии уставок не может быть АПВ ')
 
         #'sc_table':sc_table,
+
+        I_rpa_lst = []
 
         for i in range(ln_rpa_set_tb):
             for j in range(2+arc_times):
@@ -1278,13 +1281,17 @@ def checker_init_data(Okgt_node_table,Okgt_sector_table,Okgt_single_table,Ps_tab
                     ps_item['rpa_settings'].setRangeSelected(QTableWidgetSelectionRange(i, j, i, j), True)
                     raise Exception(f'В строке {i+1} столбце {j+1} таблицы параметров РЗА ничего не задано')
 
+                if j==0:
+                    I_rpa_lst.append((float(cell),i))
+
 
         ln_rpa_sc_tb = ps_item['sc_table'].rowCount()
-
+        I_sc_lst = []
         if ln_rpa_sc_tb < 1:
             mainTabWidget.setCurrentIndex(3)
             Rpa_Tabs.setCurrentIndex(Rpa_Tabs.indexOf(lv_w))
             raise Exception(f'Нет ни одной записи в таблице кривой тока КЗ')
+        
 
         for i in range(ln_rpa_sc_tb):
             I_sc = ps_item['sc_table'].item(i,0).text()
@@ -1302,12 +1309,31 @@ def checker_init_data(Okgt_node_table,Okgt_sector_table,Okgt_single_table,Ps_tab
                 ps_item['sc_table'].setRangeSelected(QTableWidgetSelectionRange(i, 1, i, 1), True)
                 raise Exception(f'В строке {i+1} таблицы кривой тока КЗ в "L" ничего не задано')
 
+            I_sc_lst.append((float(I_sc),i))
+
+        if ln_rpa_set_tb > 1:
+            min_I_sc, min_I_rpa = min(I_sc_lst),min(I_rpa_lst)
+            max_I_sc, max_I_rpa =  max(I_sc_lst),max(I_rpa_lst)
+            
+            if min_I_sc[0]<min_I_rpa[0]:
+                mainTabWidget.setCurrentIndex(3)
+                Rpa_Tabs.setCurrentIndex(Rpa_Tabs.indexOf(lv_w))
+                ps_item['sc_table'].setRangeSelected(QTableWidgetSelectionRange(min_I_sc[1], 0, min_I_sc[1], 0), True)
+                ps_item['rpa_settings'].setRangeSelected(QTableWidgetSelectionRange(min_I_rpa[1], 0, min_I_rpa[1], 0), True)
+                raise Exception(f'Минимальный ток уставки (строка {min_I_rpa[1]}) длолжен быть меньше минимального тока на кривой КЗ (строка {min_I_sc[1]})')
+
+            if max_I_sc[0]<max_I_rpa[0]:
+                mainTabWidget.setCurrentIndex(3)
+                Rpa_Tabs.setCurrentIndex(Rpa_Tabs.indexOf(lv_w))
+                ps_item['sc_table'].setRangeSelected(QTableWidgetSelectionRange(max_I_sc[1], 0, max_I_sc[1], 0), True)
+                ps_item['rpa_settings'].setRangeSelected(QTableWidgetSelectionRange(max_I_rpa[1], 0, max_I_rpa[1], 0), True)
+                raise Exception(f'Максимальный ток уставки (строка {min_I_rpa[1]}) длолжен быть меньше максимального тока на кривой КЗ (строка {min_I_sc[1]})')
 
 
-    for i,j in vl_ps_rpa.items():
+    """ for i,j in vl_ps_rpa.items():
         if not j:
             mainTabWidget.setCurrentIndex(3)
-            raise Exception(f'Для {i[0]} - {i[1]} не заданы параметры РЗА')
+            raise Exception(f'Для {i[0]} - {i[1]} не заданы параметры РЗА') """
 
 
 
