@@ -354,14 +354,16 @@ def Carson(data):
 def combinations(lst,k):
     l = len(lst)
     if k>l:
-        raise StopIteration
+        #raise StopIteration
+        return
     
     comb = [i for i in range(k)]
     while True:
         yield [lst[i] for i in comb]
         
         if comb[0]==l-k:
-            raise StopIteration
+            #raise StopIteration
+            return
         
         for i in range(k-1,-1,-1):
             comb[i]+=1
