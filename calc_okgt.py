@@ -842,7 +842,7 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30, callback=simple_call
     i += 1
 
     s_i_vl, s_j_vl = i,j
-
+    end_ps_trig = False
     for vl_name, vl in vl_info.items():
         nodes_position = {}
         for key, branch in vl["branches"].items():
@@ -901,7 +901,10 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30, callback=simple_call
                                 trig_first = True
                                 i_old = nodes_position[key[0]][0]
                                 s1,s2,s3,s4,s5 = (i_old,j,-1),(i_old+1,j+1,-1),(i_old+2,j+2,-1),(i_old+3,j+3,-1),(i_old+4,j+4,-1)
-                                #i+=5
+                                if not end_ps_trig:
+                                    i+=5
+                                else:
+                                    end_ps_trig = False
                                 e1,e2,e3,e4,e5= (i,j,1),(i+1,j+1,1),(i+2,j+2,1),(i+3,j+3,1),(i+4,j+4,1)
                             else:
                                 trig_first = True
@@ -964,14 +967,21 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30, callback=simple_call
                 
                 i+=5
                 j+=5
+                end_ps_trig = True
                 
-
+            #i+=5
             if key[1] not in nodes_position:
                 nodes_position[key[1]] = (i,j)
 
         vls_nodes[vl_name] = nodes_position
+        #i+=5
 
+    #i-=5
     s_i_сс, s_j_сс = i,j
+
+    """ for cdc in vl_lst:
+        print(cdc) """
+    
 
         
     for item in cc_lst:
@@ -1421,6 +1431,8 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30, callback=simple_call
     Ic = np.zeros((s_j_vl,),dtype=np.float64)
     Ic_f = [np.zeros((s_j_vl,),dtype=np.float64),np.zeros((s_j_vl,),dtype=np.float64),np.zeros((s_j_vl,),dtype=np.float64)]
 
+    
+
 
     for current ,itm in enumerate(okgt_sc_lst):
         
@@ -1451,6 +1463,7 @@ def main_calc(okgt_info, vl_info, ps_info, rpa_info, pz=30, callback=simple_call
 
             H = linalg.spsolve(YZ.tocsr(),JE[:,i])
             okgt_I = np.abs(H[s_i_end:s_i_end+s_j_vl])
+            #print(okgt_I)
             #B_now = okgt_I**2*t
             B_f[ph] += okgt_I**2*t
             Ic_f[ph] = np.maximum(okgt_I,Ic_f[ph])
