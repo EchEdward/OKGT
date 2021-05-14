@@ -268,7 +268,7 @@ class TableTempalte(QTableWidget):
         #self.itemEntered.connect(lambda x: print(x.text()))
         #self.cellDoubleClicked[int,int].connect(self.setPreviousItem)
         
-    @traceback_erors
+    #@traceback_erors
     def setCheckBranches(self,c1,c2):
         self.BranchesTrig = True
         self.branchesCels = (c1,c2)
@@ -301,7 +301,7 @@ class TableTempalte(QTableWidget):
             s = self.item(row,col).text()
             st.discard(s)
         
-    @traceback_erors
+    #@traceback_erors
     def checkBranches(self,row,column,pr,nw):
         if self.BranchesTrig:
             (c1,c2) = self.branchesCels
@@ -320,7 +320,7 @@ class TableTempalte(QTableWidget):
 
             self.recolorBrances()
 
-    @traceback_erors   
+    #@traceback_erors   
     def add_branch(self,row):
         if self.BranchesTrig:
             (c1,c2) = self.branchesCels
@@ -335,14 +335,14 @@ class TableTempalte(QTableWidget):
 
             self.recolorBrances()
       
-    @traceback_erors
+    #@traceback_erors
     def remove_branch(self,row):
         if self.BranchesTrig and row>-1:
             (c1,c2) = self.branchesCels
             self.branches.discard((self.item(row,c1).text(),self.item(row,c2).text()))
             self.recolorBrances()   
 
-    @traceback_erors
+    #@traceback_erors
     def recolorBrances(self):
         if self.BranchesTrig:
             (c1,c2) = self.branchesCels
@@ -395,11 +395,11 @@ class TableTempalte(QTableWidget):
                     self.item(i,c1).setBackground(QColor(255,0,0,100))
                     self.item(i,c2).setBackground(QColor(255,0,0,100))
         
-    @traceback_erors               
+    #@traceback_erors               
     def setcloseEditorSignal(self,metod):
         self.closeEditorSignal = metod
         
-    @traceback_erors
+    #@traceback_erors
     def setComboDependence(self,ind):
         exist_connects = set()
         for key, val in self.spCombo.items():
@@ -413,7 +413,7 @@ class TableTempalte(QTableWidget):
                     val.add(comb)
                     self.ComboChangeEvent(comb.currentText(),comb,colum)
                                
-    @traceback_erors
+    #@traceback_erors
     def removeComboDependence(self,ind):
         for key, val in self.spCombo.items():
             if len(key)==2:
@@ -425,7 +425,7 @@ class TableTempalte(QTableWidget):
                     val.discard(comb)
          
        
-    @traceback_erors
+    #@traceback_erors
     def ComboChangeEvent(self,text,obj,colum):
         for key in self.spCombo:
             if len(key)==2:
@@ -467,7 +467,7 @@ class TableTempalte(QTableWidget):
         return super().edit(index, trigger, event) 
 
                
-    @traceback_erors
+    #@traceback_erors
     def closeEditor(self, editor, hint):
         if self.closeEditorSignal is not None:
             self.closeEditorSignal()
@@ -488,7 +488,7 @@ class TableTempalte(QTableWidget):
         QTableWidget.closeEditor(self, editor, hint)
         
 
-    @traceback_erors
+    #@traceback_erors
     def add_row(self):
         self.rows+=1
         ind = self.currentRow()+1 if self.currentRow() != -1 else self.rows-1
@@ -496,7 +496,7 @@ class TableTempalte(QTableWidget):
         
                 
         
-    @traceback_erors  
+    #@traceback_erors  
     def remove_row(self):
         if self.rows>0:
             ind = self.currentRow() if self.currentRow() != -1 else self.rows-1
@@ -509,7 +509,7 @@ class TableTempalte(QTableWidget):
             self.setCurrentCell(-1,-1)
 
         
-    @traceback_erors
+    #@traceback_erors
     def setLinkParentToChildren(self,linkList):
         for i in linkList:
             if i not in self.childrenList:
@@ -523,7 +523,7 @@ class TableTempalte(QTableWidget):
         #self.spColums = {i:set() for i in linkList}
         #self.spCombo = {i:set() if len(i)==2 else None for i in linkList}
 
-    @traceback_erors
+    #@traceback_erors
     def add_sp(self, ind):
         for key, st in self.spColums.items():
             if len(key)==1 and len(key[0]) == 1:
@@ -571,7 +571,7 @@ class TableTempalte(QTableWidget):
                             child.addItems(["Нет"]+list(self.spColums[key]))
                             child.setCurrentText(cr_t)
 
-    @traceback_erors
+    #@traceback_erors
     def remove_sp(self, ind):
         for key, st in self.spColums.items():
             if len(key)==1 and len(key[0]) == 1:
@@ -613,7 +613,7 @@ class TableTempalte(QTableWidget):
                         child.addItems(["Нет"]+list(self.spColums[key]))
                         child.setCurrentText(cr_t)
 
-    @traceback_erors
+    #@traceback_erors
     def edit_sp(self,i,j,prev,now):
         for key, st in self.spColums.items():
             if len(key)==1 and len(key[0]) == 1:
@@ -700,7 +700,7 @@ class TableTempalte(QTableWidget):
                             child.setCurrentText(cr_t)
         
            
-    @traceback_erors
+    #@traceback_erors
     def add_child(self,key,child):
         if key in self.childrenList:
             self.childrenList[key].add(child)
@@ -708,7 +708,7 @@ class TableTempalte(QTableWidget):
             child.addItems(["Нет"]+list(self.spColums[key]))
             child.setCurrentText("Нет")
         
-    @traceback_erors
+    #@traceback_erors
     def remove_child(self,key,child):
         if key in self.childrenList:
             self.childrenList[key].discard(child)
@@ -811,7 +811,7 @@ class OkgtSectorTable(TableTempalte):
         
         self.type_dct = {"VL":"ВЛ","single_conductive":"Проводящий","single_dielectric":"Непроводящий"}
 
-    @traceback_erors
+    #@traceback_erors
     def add_row(self):
         super().add_row()
         ind = self.currentRow()+1 if self.currentRow() != -1 else self.rows-1
@@ -959,7 +959,7 @@ class VlSectorTable(TableTempalte):
                 
                 rez.append(d)
         return {"sectors":rez}
-    @traceback_erors
+    #@traceback_erors
     def write_table(self, vl_info):
         self.clear_table()
         for i in range(self.NodeObj.rowCount()):
@@ -985,7 +985,7 @@ class VlSectorTable(TableTempalte):
 
 
 class VlPsParamsTable(TableTempalte):
-    @traceback_erors
+    #@traceback_erors
     def __init__(self,NodeObj,PSObj,timer,parent=None):
         super().__init__(parent)     
 
@@ -1037,7 +1037,7 @@ class VlPsParamsTable(TableTempalte):
         for _ in range(self.rowCount()):
             self.remove_row()
     
-    @traceback_erors
+    #@traceback_erors
     def read_table(self,lst):
         rez = []
         sep_keys = {self.separator.join(key):key for key in lst}
@@ -1075,7 +1075,7 @@ class VlPsParamsTable(TableTempalte):
 
         return {"branches":branches,"PSs":PSs}
     
-    @traceback_erors
+    #@traceback_erors
     def write_table(self, vl_info):
         self.clear_table()
         for i in range(self.NodeObj.rowCount()):
@@ -1105,7 +1105,7 @@ class VlPsParamsTable(TableTempalte):
 
 
 class VlCommonChainsTable(TableTempalte):
-    @traceback_erors
+    #@traceback_erors
     def __init__(self,NodeObj,VlObj,le_manager,line,timer,parent=None):
         super().__init__(parent)   
 
@@ -1142,7 +1142,7 @@ class VlCommonChainsTable(TableTempalte):
         return page
         
     
-    @traceback_erors
+    #@traceback_erors
     def add_row(self):
         super().add_row()
         ind = self.currentRow()+1 if self.currentRow() != -1 else self.rows-1
@@ -1173,7 +1173,7 @@ class VlCommonChainsTable(TableTempalte):
         self.selectionModel().clearSelection()
         self.setCurrentCell(-1,-1)
     
-    @traceback_erors
+    #@traceback_erors
     def remove_row(self):
         if self.rows>0:
             ind = self.currentRow() if self.currentRow() != -1 else self.rows-1
@@ -1277,7 +1277,7 @@ class VlCommonChainsTable(TableTempalte):
         self.prevComboText[obj] = t
 
 
-    @traceback_erors
+    #@traceback_erors
     def BranchChanged(self,t,obj,own=True):
         if self.branchComboEventResolution:
             f,s = (0,4) if own else (4,0)
@@ -1319,7 +1319,7 @@ class VlCommonChainsTable(TableTempalte):
         for _ in range(self.rowCount()):
             self.remove_row()
 
-    @traceback_erors
+    #@traceback_erors
     def read_table(self, vl_name, d_lst):
         rez = []
         sep_keys = {name:{self.separator.join(key):key for key in lst} for name, lst in d_lst.items()}
@@ -1339,7 +1339,7 @@ class VlCommonChainsTable(TableTempalte):
                 rez.append(d)
         return {"commonchains":rez}
 
-    @traceback_erors
+    #@traceback_erors
     def write_table(self, vl_info):
         self.clear_table()
         for i in range(self.NodeObj.rowCount()):
@@ -1420,7 +1420,7 @@ class VlParamsTable(TableTempalte):
     @property
     def tp_params(self):
         return self._tp_params
-    @traceback_erors
+    #@traceback_erors
     def add_row(self):
         super().add_row()
         ind = self.currentRow()+1 if self.currentRow() != -1 else self.rows-1
@@ -1571,7 +1571,7 @@ class VlParamsTable(TableTempalte):
                 rez.append(d_main)
         return {self._tp_params:rez}
 
-    @traceback_erors
+    #@traceback_erors
     def write_table(self, vl_info):
         self.clear_table()
         for i in range(self.NodeObj.rowCount()):
@@ -1816,7 +1816,7 @@ class RPASettingsTable(QTableWidget):
         self.setItemDelegate(DownloadDelegate(self.typeDelegate))
 
 
-    @traceback_erors
+    #@traceback_erors
     def add_row(self):
         ind = self.currentRow()+1 if self.currentRow() != -1 else self.rowCount()
         self.insertRow(ind)
@@ -1827,7 +1827,7 @@ class RPASettingsTable(QTableWidget):
         self.selectionModel().clearSelection()
         self.setCurrentCell(-1,-1)
 
-    @traceback_erors  
+    #@traceback_erors  
     def remove_row(self):
         if self.rowCount()>1:
             ind = self.currentRow() if self.currentRow() != -1 else self.rowCount()-1
@@ -1836,7 +1836,7 @@ class RPASettingsTable(QTableWidget):
             self.selectionModel().clearSelection()
             self.setCurrentCell(-1,-1)
 
-    @traceback_erors 
+    #@traceback_erors 
     def setColumn(self,ln):
         c_l = self.columnCount()
         if ln != c_l-2: 
@@ -1846,7 +1846,7 @@ class RPASettingsTable(QTableWidget):
                 for j in range(c_l,ln+2):
                     self.setColumnWidth(j,60)
                     self.setItem(0,j, CustomTableWidgetItem(""))
-                    for i in range(self.currentRow()):
+                    for i in range(self.rowCount()):
                         self.setItem(i,j, CustomTableWidgetItem(""))
 
             elif c_l-2>ln:
@@ -1854,7 +1854,7 @@ class RPASettingsTable(QTableWidget):
                 
                 
 
-    @traceback_erors
+    #@traceback_erors
     def setRelativeState(self, trig):
         
         if trig != self.typeDelegate["relative"]:
@@ -1886,7 +1886,7 @@ class RPASettingsTable(QTableWidget):
         for _ in range(self.rowCount()):
             self.remove_row()
 
-    @traceback_erors
+    #@traceback_erors
     def write_table(self,key,rpa_info):
         self.clear_table()
         save_trig = self.typeDelegate["relative"]
@@ -1909,7 +1909,7 @@ class RPASettingsTable(QTableWidget):
 
         self.setRelativeState(save_trig)
            
-    @traceback_erors    
+    #@traceback_erors    
     def read_table(self):
         save_trig = self.typeDelegate["relative"]
         self.setRelativeState(True)
@@ -1955,7 +1955,7 @@ class ShortCircuitLineTable(QTableWidget):
         QTableWidget.closeEditor(self, editor, hint)
         
 
-    @traceback_erors
+    #@traceback_erors
     def add_row(self):
         ind = self.currentRow()+1 if self.currentRow() != -1 else self.rowCount()
         self.insertRow(ind)
@@ -1967,7 +1967,7 @@ class ShortCircuitLineTable(QTableWidget):
         self.setCurrentCell(-1,-1)
         
         
-    @traceback_erors  
+    #@traceback_erors  
     def remove_row(self):
         if self.rowCount()>0:
             ind = self.currentRow() if self.currentRow() != -1 else self.rowCount()-1
@@ -1980,7 +1980,7 @@ class ShortCircuitLineTable(QTableWidget):
         for _ in range(self.rowCount()):
             self.remove_row()
 
-    @traceback_erors
+    #@traceback_erors
     def write_table(self,key,rpa_info):
         self.clear_table()
         I_sc, L_sc = rpa_info[key]["I_sc"], rpa_info[key]["L_sc"]
@@ -1990,7 +1990,7 @@ class ShortCircuitLineTable(QTableWidget):
             self.item(i,1).setText(str("" if L is None else L))
             
 
-    @traceback_erors   
+    #@traceback_erors   
     def read_table(self, own=False):
         I_sc, L_sc = [], []
         for i in range(self.rowCount()):
@@ -2003,7 +2003,7 @@ class ShortCircuitLineTable(QTableWidget):
           
         return {"I_sc":I_sc,"L_sc":L_sc}
 
-    @traceback_erors
+    #@traceback_erors
     def setColorMistakes(self, I_sc, L_sc):
         rows = self.rowCount()
         #print(I_sc, L_sc)
@@ -2085,7 +2085,7 @@ class LineEditManager():
 
             self.editChildren()
         
-    @traceback_erors
+    #@traceback_erors
     def remove_lineEdit(self, obj):
         if obj in self.line_edit_objs:
             self.unique_set.discard(obj.text().strip())
@@ -2095,7 +2095,7 @@ class LineEditManager():
 
             self.editChildren()
 
-    @traceback_erors
+    #@traceback_erors
     def add_child(self,child,line=None):
         self.children_set.add(child)
         self.children_except[child] = line
@@ -2106,7 +2106,7 @@ class LineEditManager():
         child.addItems(["Нет"]+lst)
         child.setCurrentText("Нет")
         
-    @traceback_erors
+    #@traceback_erors
     def remove_child(self,child):
         if child in self.children_except:
             self.children_set.discard(child)
@@ -2127,7 +2127,7 @@ class LineEditManager():
             child.addItems(["Нет"]+lst)
             child.setCurrentText(cr_t)
 
-    @traceback_erors
+    #@traceback_erors
     def editingFinished(self,new_text,obj):
         new_text = new_text.strip()
         old_text = self.line_edit_objs[obj]
