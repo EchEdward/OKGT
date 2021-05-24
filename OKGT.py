@@ -97,10 +97,10 @@ class MyWindow(QMainWindow):
         super(MyWindow,self).__init__(parent)
 
         self.setSettings()
-
+        self.program_name = 'RopeTP'
         self.currentFilePath = ''
         self.currentFileName = 'Новый файл'
-        self.setWindowTitle(f"OKGT - {self.currentFileName}")
+        self.setWindowTitle(f"{self.program_name} - {self.currentFileName}")
         self.setWindowIcon(QIcon("icon.ico"))
 
         desktop = QApplication.desktop()
@@ -1484,7 +1484,7 @@ class MyWindow(QMainWindow):
             self.main_settings['id_open'] = os.path.dirname(fname)
             self.currentFilePath = fname
             self.currentFileName = os.path.splitext(os.path.split(fname)[1])[0]
-            self.setWindowTitle(f"OKGT - {self.currentFileName}")
+            self.setWindowTitle(f"{self.program_name} - {self.currentFileName}")
 
             with open(fname, "r", encoding="utf8") as f:
                 data  = json.load(f)
@@ -1544,7 +1544,7 @@ class MyWindow(QMainWindow):
             self.main_settings['id_save_as'] = os.path.dirname(fname)
             self.currentFilePath = fname
             self.currentFileName = os.path.splitext(os.path.split(fname)[1])[0]
-            self.setWindowTitle(f"OKGT - {self.currentFileName}")
+            self.setWindowTitle(f"{self.program_name} - {self.currentFileName}")
 
             okgt_info, ps_info, vl_info, rpa_info = self.ToJsonFormat(*self.ReadTables())
 
