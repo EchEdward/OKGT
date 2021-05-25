@@ -1596,9 +1596,9 @@ if __name__=='__main__':
     window = MyWindow()
     
     logging.basicConfig(filename=os.path.join(window.path_midle_files,'okgt.log'), level=logging.INFO)
-    def my_excepthook(type, value, tback):
-        logging.error(tback.tb_frame.f_code)
-        sys.__excepthook__(type, value, tback)
+    def my_excepthook(typ, value, tback):
+        logging.error(traceback.format_exception(typ, value, tback))
+        sys.__excepthook__(typ, value, tback)
         sys.exit(1)
 
     sys.excepthook = my_excepthook

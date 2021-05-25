@@ -474,8 +474,7 @@ class TableTempalte(QTableWidget):
         
         i = self.currentRow()
         j = self.currentColumn()
-        now = self.currentItem().text()
-        
+        now = self.currentItem().text()       
         self.checkUnique(i,j,self.previousItem,now)
         #self.previousItem = now
         now = self.currentItem().text()
