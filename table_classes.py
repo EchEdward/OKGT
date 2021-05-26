@@ -471,20 +471,26 @@ class TableTempalte(QTableWidget):
     def closeEditor(self, editor, hint):
         if self.closeEditorSignal is not None:
             self.closeEditorSignal()
-        
-        i = self.currentRow()
-        j = self.currentColumn()
-        now = self.currentItem().text()       
-        self.checkUnique(i,j,self.previousItem,now)
-        #self.previousItem = now
-        now = self.currentItem().text()
-        
-        self.edit_sp(i,j,self.previousItem,now)
-        self.checkBranches(i,j,self.previousItem,now)
-        
-        
-        
-        QTableWidget.closeEditor(self, editor, hint)
+        try:
+            i = self.currentRow()
+            j = self.currentColumn()  
+            #now = self.currentItem().text()  
+            now = editor.text()
+            self.checkUnique(i,j,self.previousItem,now)
+            #self.previousItem = now
+            #now = self.currentItem().text()
+            now = editor.text()
+            
+            self.edit_sp(i,j,self.previousItem,now)
+            self.checkBranches(i,j,self.previousItem,now)
+            
+        except Exception:
+            print(traceback.format_exc())
+            QTableWidget.closeEditor(self, editor, hint)
+            
+            
+        else:
+            QTableWidget.closeEditor(self, editor, hint)
         
 
     #@traceback_erors
